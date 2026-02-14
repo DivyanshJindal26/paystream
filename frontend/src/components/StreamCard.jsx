@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import EarningsTicker from './EarningsTicker';
 
-export default function StreamCard({ stream, account, onWithdraw, withdrawing }) {
+export default function StreamCard({ stream, account, onWithdraw, withdrawing, pendingBonusTotal }) {
   if (!stream || stream[0] === ethers.ZeroAddress) return null;
 
   const formatDate = (ts) => {
@@ -65,6 +65,25 @@ export default function StreamCard({ stream, account, onWithdraw, withdrawing })
 
       {isActive && !hasEnded && account && (
         <EarningsTicker employeeAddress={account} />
+      )}
+
+      {/* Pending Bonus Display */}
+      {pendingBonusTotal && BigInt(pendingBonusTotal) > 0n && (
+        <div style={{
+          marginTop: '1rem',
+          padding: '0.75rem 1rem',
+          borderRadius: 'var(--radius-sm)',
+          background: 'rgba(124, 58, 237, 0.08)',
+          border: '1px solid rgba(124, 58, 237, 0.2)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--purple)', fontWeight: 600 }}>🎁 Bonus Ready</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--purple)' }}>
+            +{parseFloat(ethers.formatEther(pendingBonusTotal)).toFixed(4)} HLUSD
+          </span>
+        </div>
       )}
 
       {onWithdraw && (

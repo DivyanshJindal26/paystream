@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useWallet } from '../context/WalletContext';
 import DepositPanel from '../components/DepositPanel';
@@ -11,7 +11,7 @@ export default function AdminDashboard() {
     total: '0',
     reserved: '0',
     available: '0',
-    treasuryTotal: '0', // Total contract balance
+    treasuryTotal: '0',
   });
   const [toasts, setToasts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -48,6 +48,8 @@ export default function AdminDashboard() {
         activeStreams: global[1],
         totalReserved: global[2],
         totalPaid: global[3],
+        totalBonusesScheduled: global[4],
+        totalBonusesPaid: global[5],
       }));
 
       setEmployerStats(normalizeBigInts({
@@ -323,6 +325,66 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Yield Engine + Bonus Scheduler */}
+      <div className="dashboard-grid">
+        <YieldEnginePanel />
+        <BonusSchedulerPanel employeeList={employeeList} />
+      </div>
+
+      {/* Global Analytics Cards */}
+      {globalStats && (
+        <div className="dashboard-full">
+          <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
+            <div className="card-header">
+              <span className="card-title">📊 Platform Analytics Overview</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>⚡ 100% on-chain data</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0s' }}>
+                <div className="stat-label">Total Streams</div>
+                <div className="stat-value cyan">{globalStats.totalStreams.toString()}</div>
+              </div>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.05s' }}>
+                <div className="stat-label">Active Streams</div>
+                <div className="stat-value green">{globalStats.activeStreams.toString()}</div>
+              </div>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.1s' }}>
+                <div className="stat-label">Total Reserved</div>
+                <div className="stat-value purple">{parseFloat(ethers.formatEther(globalStats.totalReserved)).toFixed(2)}</div>
+                <div className="form-hint">HLUSD</div>
+              </div>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.15s' }}>
+                <div className="stat-label">Total Paid</div>
+                <div className="stat-value green">{parseFloat(ethers.formatEther(globalStats.totalPaid)).toFixed(2)}</div>
+                <div className="form-hint">HLUSD</div>
+              </div>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.2s', borderColor: 'rgba(255,215,0,0.2)' }}>
+                <div className="stat-label">Yield Generated</div>
+                <div className="stat-value" style={{ color: '#ffd700' }}>
+                  {(() => { try { return parseFloat(ethers.formatEther(globalStats.totalPaid || '0')).toFixed(2); } catch { return '0.00'; }})()}
+                </div>
+                <div className="form-hint">HLUSD</div>
+              </div>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.25s', borderColor: 'rgba(255,136,0,0.2)' }}>
+                <div className="stat-label">Bonuses Scheduled</div>
+                <div className="stat-value" style={{ color: '#ff8800' }}>{parseFloat(ethers.formatEther(globalStats.totalBonusesScheduled || '0')).toFixed(2)}</div>
+                <div className="form-hint">HLUSD</div>
+              </div>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.3s', borderColor: 'rgba(0,255,136,0.2)' }}>
+                <div className="stat-label">Bonuses Paid</div>
+                <div className="stat-value green">{parseFloat(ethers.formatEther(globalStats.totalBonusesPaid || '0')).toFixed(2)}</div>
+                <div className="form-hint">HLUSD</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Info Panels */}
+      <div className="dashboard-full">
+        <ExplanationPanels />
       </div>
 
       {/* Deposit + Create Stream */}
@@ -947,6 +1009,335 @@ function EditStreamModal({ address, streamData, onClose, onSuccess }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ========== YIELD ENGINE PANEL ==========
+function YieldEnginePanel() {
+  const { account, contracts } = useWallet();
+  const [yieldStats, setYieldStats] = useState(null);
+  const [displayYield, setDisplayYield] = useState('0');
+  const [claiming, setClaiming] = useState(false);
+  const [claimSuccess, setClaimSuccess] = useState(false);
+  const animRef = useRef(null);
+  const lastFetchRef = useRef({ accrued: 0n, reserved: 0n, rate: 5, timestamp: 0 });
+
+  const fetchYieldStats = useCallback(async () => {
+    if (!contracts.treasury || !account) return;
+    try {
+      const stats = await contracts.treasury.getYieldStats(account);
+      const s = {
+        reserved: stats[0].toString(),
+        accruedYield: stats[1].toString(),
+        totalClaimed: stats[2].toString(),
+        annualRate: Number(stats[3]),
+        lastClaim: Number(stats[4]),
+      };
+      setYieldStats(s);
+      lastFetchRef.current = {
+        accrued: stats[1],
+        reserved: stats[0],
+        rate: Number(stats[3]),
+        timestamp: Date.now(),
+      };
+    } catch (err) {
+      console.error('Yield stats error:', err);
+    }
+  }, [contracts.treasury, account]);
+
+  useEffect(() => {
+    fetchYieldStats();
+    const iv = setInterval(fetchYieldStats, 10000);
+    return () => clearInterval(iv);
+  }, [fetchYieldStats]);
+
+  // Live ticking yield counter (updates every second)
+  useEffect(() => {
+    const tick = () => {
+      const { accrued, reserved, rate, timestamp } = lastFetchRef.current;
+      if (reserved === 0n) {
+        setDisplayYield('0.000000000000');
+        return;
+      }
+      const elapsedMs = Date.now() - timestamp;
+      const elapsedSec = elapsedMs / 1000;
+      // yield increment = reserved * rate * elapsed / (100 * 365 days)
+      const increment = (Number(ethers.formatEther(reserved)) * rate * elapsedSec) / (100 * 365 * 24 * 3600);
+      const total = Number(ethers.formatEther(accrued)) + increment;
+      setDisplayYield(total.toFixed(12));
+    };
+    animRef.current = setInterval(tick, 100);
+    return () => clearInterval(animRef.current);
+  }, [yieldStats]);
+
+  const handleClaimYield = async () => {
+    if (!contracts.treasury) return;
+    setClaiming(true);
+    try {
+      const tx = await contracts.treasury.claimYield();
+      await tx.wait();
+      setClaimSuccess(true);
+      setTimeout(() => setClaimSuccess(false), 2000);
+      fetchYieldStats();
+    } catch (err) {
+      console.error('Claim yield error:', err);
+      alert(err.reason || err.message || 'Claim failed');
+    } finally {
+      setClaiming(false);
+    }
+  };
+
+  return (
+    <div className="glass-card yield-panel">
+      <div className="card-header">
+        <span className="card-title">🏦 Payroll Capital Yield Engine</span>
+        <span className="yield-badge">⚡ {yieldStats?.annualRate || 5}% APY</span>
+      </div>
+
+      <div className="yield-display">
+        <div className="yield-arc-container">
+          <div className="yield-arc" />
+          <div className="yield-center">
+            <div className="yield-label">ACCRUED YIELD</div>
+            <div className={`yield-ticker ${claimSuccess ? 'yield-reset' : ''}`}>
+              {displayYield}
+            </div>
+            <div className="yield-unit">HLUSD</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', margin: '1rem 0' }}>
+        <div className="stat-item" style={{ borderColor: 'rgba(255,215,0,0.15)' }}>
+          <div className="stat-label">Reserved Capital</div>
+          <div className="stat-value" style={{ color: '#ffd700', fontSize: '1.1rem' }}>
+            {yieldStats ? parseFloat(ethers.formatEther(yieldStats.reserved)).toFixed(4) : '0.0000'}
+          </div>
+          <div className="form-hint">HLUSD</div>
+        </div>
+        <div className="stat-item" style={{ borderColor: 'rgba(0,255,136,0.15)' }}>
+          <div className="stat-label">Total Yield Claimed</div>
+          <div className="stat-value green" style={{ fontSize: '1.1rem' }}>
+            {yieldStats ? parseFloat(ethers.formatEther(yieldStats.totalClaimed)).toFixed(6) : '0.000000'}
+          </div>
+          <div className="form-hint">HLUSD</div>
+        </div>
+      </div>
+
+      <button
+        className="btn btn-yield"
+        onClick={handleClaimYield}
+        disabled={claiming || displayYield === '0.000000000000'}
+      >
+        {claiming ? <span className="spinner" /> : claimSuccess ? '✅ Yield Claimed!' : '💰 Claim Yield'}
+      </button>
+    </div>
+  );
+}
+
+// ========== BONUS SCHEDULER PANEL ==========
+function BonusSchedulerPanel({ employeeList }) {
+  const { contracts, account } = useWallet();
+  const [bonusAddr, setBonusAddr] = useState('');
+  const [bonusAmount, setBonusAmount] = useState('');
+  const [bonusDate, setBonusDate] = useState('');
+  const [bonusTime, setBonusTime] = useState('12:00');
+  const [scheduling, setScheduling] = useState(false);
+  const [allBonuses, setAllBonuses] = useState({});
+  const [loadingBonuses, setLoadingBonuses] = useState(false);
+
+  const fetchBonuses = useCallback(async () => {
+    if (!contracts.salaryStream || employeeList.length === 0) return;
+    setLoadingBonuses(true);
+    try {
+      const result = {};
+      for (const addr of employeeList) {
+        try {
+          const bonuses = await contracts.salaryStream.getEmployeeBonuses(addr);
+          if (bonuses.length > 0) {
+            result[addr] = bonuses.map(b => ({
+              amount: b.amount.toString(),
+              unlockTime: Number(b.unlockTime),
+              claimed: b.claimed,
+            }));
+          }
+        } catch { /* no bonuses */ }
+      }
+      setAllBonuses(result);
+    } catch (err) {
+      console.error('Fetch bonuses error:', err);
+    }
+    setLoadingBonuses(false);
+  }, [contracts.salaryStream, employeeList]);
+
+  useEffect(() => {
+    fetchBonuses();
+  }, [fetchBonuses]);
+
+  const handleScheduleBonus = async () => {
+    if (!contracts.salaryStream || !bonusAddr || !bonusAmount || !bonusDate) return;
+    setScheduling(true);
+    try {
+      const unlockTimestamp = Math.floor(new Date(`${bonusDate}T${bonusTime}`).getTime() / 1000);
+      const amount = ethers.parseEther(bonusAmount);
+      const tx = await contracts.salaryStream.scheduleBonus(bonusAddr, amount, unlockTimestamp);
+      await tx.wait();
+      setBonusAmount('');
+      setBonusDate('');
+      fetchBonuses();
+    } catch (err) {
+      console.error('Schedule bonus error:', err);
+      alert(err.reason || err.message || 'Failed to schedule bonus');
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const formatDate = (ts) => new Date(ts * 1000).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div className="glass-card bonus-panel">
+      <div className="card-header">
+        <span className="card-title">🎁 Bonus Scheduler</span>
+        <button className="btn btn-outline" onClick={fetchBonuses} disabled={loadingBonuses} style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
+          {loadingBonuses ? <span className="spinner" /> : '↻'}
+        </button>
+      </div>
+
+      {/* Schedule Form */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <label className="form-label">Employee Address</label>
+        <select
+          className="form-input"
+          value={bonusAddr}
+          onChange={(e) => setBonusAddr(e.target.value)}
+          style={{ marginBottom: '0.75rem' }}
+        >
+          <option value="">Select employee...</option>
+          {employeeList.map(addr => (
+            <option key={addr} value={addr}>{addr.slice(0, 8)}...{addr.slice(-6)}</option>
+          ))}
+        </select>
+
+        <label className="form-label">Bonus Amount (HLUSD)</label>
+        <input
+          className="form-input"
+          type="number"
+          step="0.001"
+          placeholder="e.g. 5.0"
+          value={bonusAmount}
+          onChange={(e) => setBonusAmount(e.target.value)}
+          style={{ marginBottom: '0.75rem' }}
+        />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+          <div>
+            <label className="form-label">Unlock Date</label>
+            <input
+              className="form-input"
+              type="date"
+              value={bonusDate}
+              onChange={(e) => setBonusDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="form-label">Unlock Time</label>
+            <input
+              className="form-input"
+              type="time"
+              value={bonusTime}
+              onChange={(e) => setBonusTime(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      <button
+        className="btn btn-purple"
+        onClick={handleScheduleBonus}
+        disabled={scheduling || !bonusAddr || !bonusAmount || !bonusDate}
+        style={{ marginBottom: '1.25rem' }}
+      >
+        {scheduling ? <span className="spinner" /> : '🎁 Schedule Bonus'}
+      </button>
+
+      {/* Bonus List */}
+      {Object.keys(allBonuses).length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--purple)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            Scheduled Bonuses
+          </div>
+          <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+            {Object.entries(allBonuses).map(([addr, bonuses]) => (
+              bonuses.map((b, i) => (
+                <div key={`${addr}-${i}`} className="bonus-row">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--cyan)' }}>
+                      {addr.slice(0, 6)}...{addr.slice(-4)}
+                    </span>
+                    <span className={`card-badge ${b.claimed ? 'badge-paused' : Date.now() / 1000 > b.unlockTime ? 'badge-active' : ''}`}
+                      style={!b.claimed && Date.now() / 1000 <= b.unlockTime ? { background: 'var(--purple-dim)', color: 'var(--purple)', border: '1px solid rgba(124,58,237,0.3)' } : {}}>
+                      {b.claimed ? 'Claimed' : Date.now() / 1000 > b.unlockTime ? 'Ready' : 'Locked'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', fontSize: '0.8rem' }}>
+                    <span style={{ fontWeight: 600 }}>{parseFloat(ethers.formatEther(b.amount)).toFixed(4)} HLUSD</span>
+                    <span style={{ color: 'var(--text-dim)' }}>{formatDate(b.unlockTime)}</span>
+                  </div>
+                </div>
+              ))
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ========== EXPLANATION PANELS ==========
+function ExplanationPanels() {
+  const [open, setOpen] = useState({});
+  const toggle = (key) => setOpen(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const panels = [
+    {
+      key: 'streaming',
+      icon: '⏱️',
+      title: 'How Salary Streaming Works',
+      content: 'PayStream converts monthly salaries into per-second payment rates. When an employer creates a stream, funds are reserved in the Treasury contract. The employee\'s earnings increase every second based on their ratePerSecond. No continuous transactions are needed — earnings are calculated dynamically using block.timestamp, and employees withdraw whenever they choose. Tax is automatically deducted at withdrawal.',
+    },
+    {
+      key: 'yield',
+      icon: '🏦',
+      title: 'How Yield Accrues',
+      content: 'While employer funds are reserved in the Treasury for active salary streams, they earn a deterministic 5% annual yield. Yield accrues linearly per second using the formula: yield = reserved × rate% × elapsed / (100 × SECONDS_PER_YEAR). This is calculated on-chain with no oracle dependency. Employers can claim accrued yield at any time without affecting employee salary streams.',
+    },
+    {
+      key: 'bonuses',
+      icon: '🎁',
+      title: 'How Bonuses Unlock',
+      content: 'Admins can schedule one-time performance bonuses for any employee with a future unlock time. Bonus funds are reserved from the employer\'s Treasury balance immediately. When the unlock time arrives, the bonus becomes claimable. During the next withdrawal, all unlocked bonuses are automatically included in the gross withdrawable amount, with tax applied uniformly. Bonuses can never be claimed twice.',
+    },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gap: '0.75rem' }}>
+      {panels.map(p => (
+        <div key={p.key} className="glass-card explanation-card" onClick={() => toggle(p.key)} style={{ cursor: 'pointer', padding: '1rem 1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+              {p.icon} {p.title}
+            </span>
+            <span style={{ fontSize: '1.2rem', transition: 'transform 0.3s', transform: open[p.key] ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+          </div>
+          {open[p.key] && (
+            <div style={{ marginTop: '0.75rem', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.7, animation: 'fadeInUp 0.3s ease' }}>
+              {p.content}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

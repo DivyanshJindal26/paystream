@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useWallet } from '../context/WalletContext';
 import StreamCard from '../components/StreamCard';
@@ -13,6 +13,8 @@ export default function EmployeeDashboard() {
   const [withdrawing, setWithdrawing] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [successPulse, setSuccessPulse] = useState(false);
+  const [bonuses, setBonuses] = useState([]);
+  const [pendingBonusTotal, setPendingBonusTotal] = useState('0');
 
   const addToast = useCallback((message, type = 'info', txHash = null) => {
     const id = Date.now();
@@ -29,10 +31,19 @@ export default function EmployeeDashboard() {
       const exists = await contracts.salaryStream.hasStream(account);
       setHasStream(exists);
       if (exists) {
-        const details = await contracts.salaryStream.getStreamDetails(account);
-        // Normalize BigInt before setting state
+        const [details, bonusList, pendingBonus] = await Promise.all([
+          contracts.salaryStream.getStreamDetails(account),
+          contracts.salaryStream.getEmployeeBonuses(account),
+          contracts.salaryStream.getPendingBonusTotal(account),
+        ]);
         const normalized = normalizeBigInts(details);
         setStream(normalized);
+        setBonuses(bonusList.map(b => ({
+          amount: b.amount.toString(),
+          unlockTime: Number(b.unlockTime),
+          claimed: b.claimed,
+        })));
+        setPendingBonusTotal(pendingBonus.toString());
       }
     } catch (err) {
       console.error('Fetch stream error:', err);
@@ -207,7 +218,20 @@ export default function EmployeeDashboard() {
                 account={account}
                 onWithdraw={handleWithdraw}
                 withdrawing={withdrawing}
+                pendingBonusTotal={pendingBonusTotal}
               />
+            </div>
+
+            {/* Performance Bonus Vault */}
+            {bonuses.length > 0 && (
+              <div style={{ marginTop: '24px', maxWidth: 640 }}>
+                <BonusVault bonuses={bonuses} />
+              </div>
+            )}
+
+            {/* Explanation Panels */}
+            <div style={{ marginTop: '24px', maxWidth: 640 }}>
+              <EmployeeExplanationPanels />
             </div>
 
             {/* OffRamp Panel */}
@@ -222,6 +246,123 @@ export default function EmployeeDashboard() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ========== BONUS VAULT ==========
+function BonusVault({ bonuses }) {
+  const [now, setNow] = useState(Math.floor(Date.now() / 1000));
+
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const fmtCountdown = (seconds) => {
+    if (seconds <= 0) return 'Unlocked';
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m ${s}s`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    return `${m}m ${s}s`;
+  };
+
+  return (
+    <div className="glass-card bonus-vault-panel">
+      <div className="card-header">
+        <span className="card-title">🎁 Performance Bonus Vault</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{bonuses.length} bonus{bonuses.length !== 1 ? 'es' : ''}</span>
+      </div>
+
+      <div style={{ display: 'grid', gap: '0.75rem' }}>
+        {bonuses.map((b, i) => {
+          const remaining = b.unlockTime - now;
+          const isReady = remaining <= 0 && !b.claimed;
+          const isClaimed = b.claimed;
+
+          return (
+            <div
+              key={i}
+              className={`bonus-card ${isReady ? 'bonus-ready' : ''} ${isClaimed ? 'bonus-claimed' : ''}`}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>{isClaimed ? '✅' : isReady ? '💰' : '🔒'}</span>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '1.1rem', color: isReady ? 'var(--green)' : isClaimed ? 'var(--text-dim)' : 'var(--text-primary)' }}>
+                      {parseFloat(ethers.formatEther(b.amount)).toFixed(4)} HLUSD
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                      Unlock: {new Date(b.unlockTime * 1000).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+                <span className={`card-badge ${isClaimed ? 'badge-paused' : isReady ? 'badge-active' : ''}`}
+                  style={!isClaimed && !isReady ? { background: 'var(--purple-dim)', color: 'var(--purple)', border: '1px solid rgba(124,58,237,0.3)' } : {}}>
+                  {isClaimed ? 'Claimed' : isReady ? 'Ready' : 'Locked'}
+                </span>
+              </div>
+
+              {!isClaimed && !isReady && (
+                <div className="bonus-countdown">
+                  <div className="bonus-countdown-bar" style={{ width: `${Math.max(0, Math.min(100, (1 - remaining / 86400) * 100))}%` }} />
+                  <span className="bonus-countdown-text">⏱️ {fmtCountdown(remaining)}</span>
+                </div>
+              )}
+
+              {isReady && (
+                <div style={{ fontSize: '0.8rem', color: 'var(--green)', marginTop: '0.25rem', fontWeight: 600 }}>
+                  ✨ Included in your next withdrawal!
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ========== EMPLOYEE EXPLANATION PANELS ==========
+function EmployeeExplanationPanels() {
+  const [open, setOpen] = useState({});
+  const toggle = (key) => setOpen(prev => ({ ...prev, [key]: !prev[key] }));
+
+  const panels = [
+    {
+      key: 'streaming',
+      icon: '⏱️',
+      title: 'How Salary Streaming Works',
+      content: 'Your salary streams in real-time, every second. The rate is your monthly salary divided by seconds in a month. You can withdraw your earned HLUSD at any time. Tax is automatically deducted at the configured rate and sent to the tax vault.',
+    },
+    {
+      key: 'bonuses',
+      icon: '🎁',
+      title: 'How Bonuses Unlock',
+      content: 'Performance bonuses are scheduled by your employer with a specific unlock date. When the countdown reaches zero, the bonus becomes "Ready" and will be automatically included in your next withdrawal. Bonuses are subject to the same tax rate as your salary.',
+    },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gap: '0.5rem' }}>
+      {panels.map(p => (
+        <div key={p.key} className="glass-card explanation-card" onClick={() => toggle(p.key)} style={{ cursor: 'pointer', padding: '0.75rem 1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, fontSize: '0.9rem' }}>
+              {p.icon} {p.title}
+            </span>
+            <span style={{ fontSize: '1rem', transition: 'transform 0.3s', transform: open[p.key] ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+          </div>
+          {open[p.key] && (
+            <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6, animation: 'fadeInUp 0.3s ease' }}>
+              {p.content}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

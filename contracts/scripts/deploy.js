@@ -125,7 +125,13 @@ async function main() {
   console.log("3. Employee withdraws earned salary:");
   console.log(`   salaryStream.withdraw()`);
   console.log("");
-  console.log("4. Convert HLUSD to INR via OffRamp:");
+  console.log("4. Schedule a performance bonus:");
+  console.log(`   salaryStream.scheduleBonus(employeeAddr, amount, unlockTime)`);
+  console.log("");
+  console.log("5. Claim yield on reserved capital:");
+  console.log(`   treasury.claimYield()`);
+  console.log("");
+  console.log("6. Convert HLUSD to INR via OffRamp:");
   console.log(`   offRamp.convertToFiat(rate, timestamp, signature)`);
   console.log("");
 

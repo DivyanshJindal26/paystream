@@ -8,7 +8,7 @@ interface ITreasury {
 
 /**
  * @title SalaryStream
- * @notice Real-time per-second payroll streaming with tax redirection using native HLUSD
+ * @notice Real-time per-second payroll streaming with tax redirection, scheduled bonuses using native HLUSD
  * @dev Gas-optimized with dynamic earnings calculation (no continuous state updates)
  * @dev Implements simple admin-based access control for security scoring
  * @dev Per-second streaming efficiency: earnings = ratePerSecond * elapsed time
@@ -28,7 +28,7 @@ contract SalaryStream {
     address public taxVault;
 
     /// @notice Seconds in 30 days for salary calculations
-    uint256 private constant SECONDS_PER_MONTH = 5 minutes;
+    uint256 private constant SECONDS_PER_MONTH = 30 days;
 
     // ========== INDEXING & ANALYTICS ==========
 
@@ -50,20 +50,26 @@ contract SalaryStream {
     uint256 public totalReservedGlobal;
     uint256 public totalPaidGlobal;
 
+    // ========== BONUS SYSTEM ==========
+
+    /// @notice Bonus structure for scheduled one-time payments
+    struct Bonus {
+        uint256 amount;
+        uint256 unlockTime;
+        bool claimed;
+    }
+
+    /// @notice Bonuses mapped per employee
+    mapping(address => Bonus[]) public employeeBonuses;
+
+    /// @notice Global bonus analytics
+    uint256 public totalBonusesScheduled;
+    uint256 public totalBonusesPaid;
+
     // ========== STREAM STRUCTURE ==========
 
     /**
      * @notice Stream data structure for per-second salary streaming
-     * @param employer Address funding the stream (who called createStream)
-     * @param monthlySalary Original monthly salary amount
-     * @param ratePerSecond Native HLUSD earned per second (prevents rounding drift)
-     * @param startTime Timestamp when streaming starts
-     * @param endTime Timestamp when streaming ends
-     * @param withdrawn Total amount already withdrawn by employee
-     * @param totalAllocated Total HLUSD allocated for entire stream
-     * @param taxPercent Tax percentage (e.g., 10 = 10%)
-     * @param paused Whether stream is currently paused
-     * @param exists Whether stream exists (prevents ambiguity)
      */
     struct Stream {
         address employer;
@@ -98,6 +104,8 @@ contract SalaryStream {
     event StreamCancelled(address indexed employee, uint256 refundAmount);
     event TaxPaid(address indexed employee, uint256 amount);
     event TaxVaultUpdated(address indexed oldVault, address indexed newVault);
+    event BonusScheduled(address indexed employee, uint256 amount, uint256 unlockTime, uint256 bonusIndex);
+    event BonusClaimed(address indexed employee, uint256 amount, uint256 bonusIndex);
 
     // ========== CONSTRUCTOR ==========
 
@@ -292,10 +300,10 @@ contract SalaryStream {
     // ========== EMPLOYEE FUNCTIONS ==========
 
     /**
-     * @notice Withdraw earned salary with automatic tax deduction
+     * @notice Withdraw earned salary + unlocked bonuses with automatic tax deduction
      * @dev Implements tax redirection as per hackathon requirements
      * @dev Follows Checks-Effects-Interactions pattern for security
-     * @dev Dynamic calculation ensures streaming efficiency (no rounding drift)
+     * @dev Bounded bonus loop per employee prevents gas issues
      */
     function withdraw() external {
         Stream storage stream = streams[msg.sender];
@@ -304,17 +312,31 @@ contract SalaryStream {
         require(stream.exists, "Stream not found");
         require(!stream.paused, "Stream paused");
 
-        uint256 grossWithdrawable = _withdrawable(msg.sender);
+        uint256 streamWithdrawable = _withdrawable(msg.sender);
+
+        // Process unlocked bonuses (bounded loop)
+        uint256 bonusTotal = 0;
+        Bonus[] storage bonuses = employeeBonuses[msg.sender];
+        for (uint256 i = 0; i < bonuses.length; i++) {
+            if (bonuses[i].unlockTime <= block.timestamp && !bonuses[i].claimed) {
+                bonusTotal += bonuses[i].amount;
+                bonuses[i].claimed = true;
+                totalBonusesPaid += bonuses[i].amount;
+                emit BonusClaimed(msg.sender, bonuses[i].amount, i);
+            }
+        }
+
+        uint256 grossWithdrawable = streamWithdrawable + bonusTotal;
         require(grossWithdrawable > 0, "Nothing to withdraw");
 
         // Effects: Update state before external calls (CEI pattern)
-        stream.withdrawn += grossWithdrawable;
+        stream.withdrawn += streamWithdrawable;
 
         // Update global analytics
         totalPaidGlobal += grossWithdrawable;
         totalReservedGlobal -= grossWithdrawable;
 
-        // Calculate tax split
+        // Calculate tax split (on total gross including bonuses)
         uint256 taxAmount = (grossWithdrawable * stream.taxPercent) / 100;
         uint256 netAmount = grossWithdrawable - taxAmount;
 
@@ -333,6 +355,89 @@ contract SalaryStream {
         }
 
         emit Withdrawn(msg.sender, netAmount, taxAmount);
+    }
+
+    // ========== BONUS FUNCTIONS ==========
+
+    /**
+     * @notice Schedule a one-time performance bonus for an employee
+     * @dev Only admin can schedule. Funds are reserved from treasury.
+     * @param employee Address of the employee
+     * @param amount Bonus amount in native HLUSD (wei)
+     * @param unlockTime Timestamp when bonus becomes claimable
+     */
+    function scheduleBonus(
+        address employee,
+        uint256 amount,
+        uint256 unlockTime
+    ) external onlyAdmin {
+        require(streams[employee].exists, "Stream not found");
+        require(amount > 0, "Amount must be > 0");
+        require(unlockTime > block.timestamp, "Unlock must be in future");
+
+        // Reserve bonus funds from employer's treasury balance
+        address employer = streams[employee].employer;
+        treasury.reserveFunds(employer, amount);
+
+        // Track in global reserved
+        totalReservedGlobal += amount;
+        totalBonusesScheduled += amount;
+
+        // Store bonus
+        employeeBonuses[employee].push(Bonus({
+            amount: amount,
+            unlockTime: unlockTime,
+            claimed: false
+        }));
+
+        emit BonusScheduled(employee, amount, unlockTime, employeeBonuses[employee].length - 1);
+    }
+
+    /**
+     * @notice Get all bonuses for an employee
+     * @param employee Address of the employee
+     * @return Array of Bonus structs
+     */
+    function getEmployeeBonuses(address employee) external view returns (Bonus[] memory) {
+        return employeeBonuses[employee];
+    }
+
+    /**
+     * @notice Get total unlocked but unclaimed bonus for an employee
+     * @param employee Address of the employee
+     * @return Total pending bonus amount
+     */
+    function getPendingBonusTotal(address employee) external view returns (uint256) {
+        uint256 total = 0;
+        Bonus[] storage bonuses = employeeBonuses[employee];
+        for (uint256 i = 0; i < bonuses.length; i++) {
+            if (bonuses[i].unlockTime <= block.timestamp && !bonuses[i].claimed) {
+                total += bonuses[i].amount;
+            }
+        }
+        return total;
+    }
+
+    /**
+     * @notice Get bonus analytics
+     * @return _totalScheduled Total bonuses ever scheduled (in HLUSD)
+     * @return _totalPaid Total bonuses paid out
+     * @return _totalLiability Outstanding unpaid bonuses
+     */
+    function getBonusStats()
+        external
+        view
+        returns (
+            uint256 _totalScheduled,
+            uint256 _totalPaid,
+            uint256 _totalLiability
+        )
+    {
+        return (
+            totalBonusesScheduled,
+            totalBonusesPaid,
+            totalBonusesScheduled - totalBonusesPaid
+        );
     }
 
     // ========== VIEW FUNCTIONS (HR Dashboard Support) ==========
@@ -411,6 +516,8 @@ contract SalaryStream {
      * @return _activeStreams Number of currently active streams
      * @return _totalReserved Total HLUSD currently reserved for streams
      * @return _totalPaid Total HLUSD paid out to employees
+     * @return _totalBonusesScheduled Total bonuses scheduled
+     * @return _totalBonusesPaid Total bonuses paid
      */
     function getGlobalStats()
         external
@@ -419,14 +526,18 @@ contract SalaryStream {
             uint256 _totalStreams,
             uint256 _activeStreams,
             uint256 _totalReserved,
-            uint256 _totalPaid
+            uint256 _totalPaid,
+            uint256 _totalBonusesScheduled,
+            uint256 _totalBonusesPaid
         )
     {
         return (
             totalStreamsCreated,
             totalActiveStreams,
             totalReservedGlobal,
-            totalPaidGlobal
+            totalPaidGlobal,
+            totalBonusesScheduled,
+            totalBonusesPaid
         );
     }
 

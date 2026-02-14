@@ -1,12 +1,12 @@
 {
   "network": "HeLa Testnet",
   "chainId": 666888,
-  "timestamp": "2026-02-14T11:09:04.555Z",
+  "timestamp": "2026-02-14T18:09:34.176Z",
   "deployer": "0x95e38e215CDe9655f6cF5E89E89d00e0BB62144a",
   "contracts": {
-    "Treasury": "0xa1c593922f401108d2A7a1f720d805fc21e11bc6",
-    "SalaryStream": "0x11917452aFE3c7E25Dd5dafA3aD2E27028B1b36E",
-    "OffRamp": "0xd961e976a5b67F3ef049E263708b346e781560ef",
+    "Treasury": "0x6a6e8404124e3f1D80575C978c136a03c00415ed",
+    "SalaryStream": "0x4F8BE7f34CA25Bb92534fA9C716120372Ac73ffF",
+    "OffRamp": "0x692C789E2982Af63c109D84D6c8F81A50B94F01e",
     "TaxVault": "0x95e38e215CDe9655f6cF5E89E89d00e0BB62144a",
     "OracleSigner": "0xaAaB1B176c5665AF6e8242b699030FfD3f6b7ddB"
   },

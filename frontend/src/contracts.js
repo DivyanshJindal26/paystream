@@ -9,7 +9,15 @@ export const TREASURY_ABI = [
   "function employerBalances(address) external view returns (uint256)",
   "function employerReserved(address) external view returns (uint256)",
   "function getAvailableBalance(address) external view returns (uint256)",
-  "function getTreasuryBalance() external view returns (uint256)"
+  "function getTreasuryBalance() external view returns (uint256)",
+  "function claimYield() external",
+  "function getAccruedYield(address) external view returns (uint256)",
+  "function getYieldStats(address) external view returns (uint256 reserved, uint256 accruedYield, uint256 totalYieldClaimed, uint256 annualYieldPercent, uint256 lastClaimTimestamp)",
+  "function totalYieldPaidGlobal() external view returns (uint256)",
+  "function annualYieldPercent() external view returns (uint256)",
+  "function lastYieldClaim(address) external view returns (uint256)",
+  "function totalYieldClaimed(address) external view returns (uint256)",
+  "event YieldClaimed(address indexed employer, uint256 amount, uint256 reserved, uint256 elapsed)"
 ];
 
 export const STREAM_ABI = [
@@ -27,10 +35,18 @@ export const STREAM_ABI = [
   "function getAllEmployees() external view returns (address[])",
   "function getActiveEmployees() external view returns (address[])",
   "function getEmployeesByEmployer(address) external view returns (address[])",
-  "function getGlobalStats() external view returns (uint256, uint256, uint256, uint256)",
+  "function getGlobalStats() external view returns (uint256, uint256, uint256, uint256, uint256, uint256)",
   "function getTotalWithdrawable() external view returns (uint256)",
   "function getEmployerStats(address) external view returns (uint256, uint256, uint256, uint256)",
-  "event StreamCreated(address indexed employer, address indexed employee, uint256 monthlySalary, uint256 durationMonths, uint256 taxPercent, uint256 startTime)"
+  "function scheduleBonus(address employee, uint256 amount, uint256 unlockTime) external",
+  "function getEmployeeBonuses(address) external view returns (tuple(uint256 amount, uint256 unlockTime, bool claimed)[])",
+  "function getPendingBonusTotal(address) external view returns (uint256)",
+  "function getBonusStats() external view returns (uint256 totalScheduled, uint256 totalPaid, uint256 totalLiability)",
+  "function totalBonusesScheduled() external view returns (uint256)",
+  "function totalBonusesPaid() external view returns (uint256)",
+  "event StreamCreated(address indexed employer, address indexed employee, uint256 monthlySalary, uint256 durationMonths, uint256 taxPercent, uint256 startTime)",
+  "event BonusScheduled(address indexed employee, uint256 amount, uint256 unlockTime, uint256 bonusIndex)",
+  "event BonusClaimed(address indexed employee, uint256 amount, uint256 bonusIndex)"
 ];
 
 export const OFFRAMP_ABI = [
