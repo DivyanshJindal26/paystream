@@ -38,11 +38,15 @@ async function main() {
   // ========== CONFIGURATION ==========
   // Tax vault can be set to a separate address or deployer initially
   const TAX_VAULT = process.env.TAX_VAULT || deployer.address;
+  
+  // Oracle signer for OffRamp - defaults to deployer but should be separate in production
+  const ORACLE_SIGNER = process.env.ORACLE_SIGNER || deployer.address;
 
   console.log("Configuration:");
   console.log("- Network: HeLa Testnet");
   console.log("- Chain ID: 666888");
   console.log("- Tax Vault:", TAX_VAULT);
+  console.log("- Oracle Signer:", ORACLE_SIGNER);
   console.log("- Native Asset: HLUSD (like ETH)");
   console.log("");
 
@@ -71,12 +75,24 @@ async function main() {
   console.log("✅ SalaryStream linked to Treasury");
   console.log("");
 
-  // ========== STEP 4: Verify Setup ==========
-  console.log("🔐 Step 4: Verifying deployment...");
+  // ========== STEP 4: Deploy OffRamp ==========
+  console.log("📦 Step 4: Deploying OffRamp contract...");
+  const OffRamp = await hre.ethers.getContractFactory("OffRamp");
+  const offRamp = await OffRamp.deploy(ORACLE_SIGNER);
+  await offRamp.waitForDeployment();
+  const offRampAddress = await offRamp.getAddress();
+  console.log("✅ OffRamp deployed to:", offRampAddress);
+  console.log("   Oracle Signer:", ORACLE_SIGNER);
+  console.log("");
+
+  // ========== STEP 5: Verify Setup ==========
+  console.log("🔐 Step 5: Verifying deployment...");
   const treasuryStreamAddr = await treasury.salaryStream();
   const streamAdmin = await salaryStream.admin();
+  const offRampOracleSigner = await offRamp.oracleSigner();
   console.log("✅ Treasury.salaryStream:", treasuryStreamAddr);
   console.log("✅ SalaryStream.admin:", streamAdmin);
+  console.log("✅ OffRamp.oracleSigner:", offRampOracleSigner);
   console.log("");
 
   // ========== DEPLOYMENT SUMMARY ==========
@@ -85,12 +101,14 @@ async function main() {
   console.log("========================================");
   console.log("");
   console.log("📋 Contract Addresses:");
-  console.log("┌─────────────────────────────────────────┐");
-  console.log("│ Treasury:     ", treasuryAddress);
-  console.log("│ SalaryStream: ", salaryStreamAddress);
-  console.log("│ Tax Vault:    ", TAX_VAULT);
-  console.log("│ Admin:        ", deployer.address);
-  console.log("└─────────────────────────────────────────┘");
+  console.log("┌──────────────────────────────────────────────┐");
+  console.log("│ Treasury:      ", treasuryAddress);
+  console.log("│ SalaryStream:  ", salaryStreamAddress);
+  console.log("│ OffRamp:       ", offRampAddress);
+  console.log("│ Tax Vault:     ", TAX_VAULT);
+  console.log("│ Oracle Signer: ", ORACLE_SIGNER);
+  console.log("│ Admin:         ", deployer.address);
+  console.log("└──────────────────────────────────────────────┘");
   console.log("");
   console.log("📝 Next Steps:");
   console.log("1. Deposit native HLUSD to Treasury:");
@@ -107,6 +125,9 @@ async function main() {
   console.log("3. Employee withdraws earned salary:");
   console.log(`   salaryStream.withdraw()`);
   console.log("");
+  console.log("4. Convert HLUSD to INR via OffRamp:");
+  console.log(`   offRamp.convertToFiat(rate, timestamp, signature)`);
+  console.log("");
 
   // Save deployment info to file
   const deploymentInfo = {
@@ -117,7 +138,9 @@ async function main() {
     contracts: {
       Treasury: treasuryAddress,
       SalaryStream: salaryStreamAddress,
-      TaxVault: TAX_VAULT
+      OffRamp: offRampAddress,
+      TaxVault: TAX_VAULT,
+      OracleSigner: ORACLE_SIGNER
     },
     config: {
       solidityVersion: "0.8.9",

@@ -11,6 +11,7 @@ export default function AdminDashboard() {
     total: '0',
     reserved: '0',
     available: '0',
+    treasuryTotal: '0', // Total contract balance
   });
   const [toasts, setToasts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -76,20 +77,31 @@ export default function AdminDashboard() {
   const fetchBalances = useCallback(async () => {
     if (!contracts.treasury || !account) return;
     setLoading(true);
+    console.log('💰 Fetching balances for account:', account);
     try {
-      const [total, reserved] = await Promise.all([
+      const [total, reserved, treasuryTotal] = await Promise.all([
         contracts.treasury.employerBalances(account),
         contracts.treasury.employerReserved(account),
+        contracts.treasury.getTreasuryBalance(), // Get total contract balance
       ]);
       // Normalize BigInt before setting state
       const totalStr = total.toString();
       const reservedStr = reserved.toString();
       const availableStr = (total - reserved).toString();
+      const treasuryTotalStr = treasuryTotal.toString();
+      
+      console.log('✅ Balances fetched:', {
+        account: account,
+        total: ethers.formatEther(totalStr),
+        reserved: ethers.formatEther(reservedStr),
+        available: ethers.formatEther(availableStr),
+      });
       
       setBalances({
         total: totalStr,
         reserved: reservedStr,
         available: availableStr,
+        treasuryTotal: treasuryTotalStr,
       });
     } catch (err) {
       console.error('Fetch balances error:', err);
@@ -193,25 +205,54 @@ export default function AdminDashboard() {
               {loading ? <span className="spinner" /> : '↻ Refresh'}
             </button>
           </div>
-          <div className="treasury-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+          
+          {/* Account Info Banner */}
+          <div style={{ 
+            background: 'rgba(99, 102, 241, 0.1)', 
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            marginBottom: '1rem',
+            fontSize: '0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <span style={{ fontSize: '1rem' }}>👤</span>
+            <div>
+              <strong>Viewing balance for:</strong> {account}
+              <div style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '4px' }}>
+                💡 Treasury tracks deposits per wallet address. Switch MetaMask accounts to view different balances.
+              </div>
+            </div>
+          </div>
+
+          <div className="treasury-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
             <div className="stat-item">
-              <div className="stat-label">Total Deposited</div>
+              <div className="stat-label">Your Total Deposited</div>
               <div className="stat-value">{ethers.formatEther(balances.total)}</div>
               <div className="form-hint">HLUSD</div>
             </div>
             <div className="stat-item">
-              <div className="stat-label">Reserved for Streams</div>
+              <div className="stat-label">Your Reserved</div>
               <div className="stat-value purple">
                 {ethers.formatEther(balances.reserved)}
               </div>
               <div className="form-hint">HLUSD</div>
             </div>
             <div className="stat-item">
-              <div className="stat-label">Available</div>
+              <div className="stat-label">Your Available</div>
               <div className="stat-value green">
                 {ethers.formatEther(balances.available)}
               </div>
               <div className="form-hint">HLUSD</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Total Treasury Balance</div>
+              <div className="stat-value" style={{ color: 'var(--cyan)' }}>
+                {ethers.formatEther(balances.treasuryTotal)}
+              </div>
+              <div className="form-hint">All employers</div>
             </div>
           </div>
         </div>

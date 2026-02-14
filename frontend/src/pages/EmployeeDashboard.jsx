@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useWallet } from '../context/WalletContext';
 import StreamCard from '../components/StreamCard';
+import OffRampPanel from '../components/OffRampPanel';
 import normalizeBigInts from '../utils/normalizeBigInts';
 
 export default function EmployeeDashboard() {
@@ -199,14 +200,26 @@ export default function EmployeeDashboard() {
             </div>
           </div>
         ) : (
-          <div className={successPulse ? 'success-pulse' : ''} style={{ maxWidth: 640 }}>
-            <StreamCard
-              stream={stream}
-              account={account}
-              onWithdraw={handleWithdraw}
-              withdrawing={withdrawing}
-            />
-          </div>
+          <>
+            <div className={successPulse ? 'success-pulse' : ''} style={{ maxWidth: 640 }}>
+              <StreamCard
+                stream={stream}
+                account={account}
+                onWithdraw={handleWithdraw}
+                withdrawing={withdrawing}
+              />
+            </div>
+
+            {/* OffRamp Panel */}
+            {contracts.offRamp && (
+              <div style={{ marginTop: '40px' }}>
+                <OffRampPanel
+                  offRampContract={contracts.offRamp}
+                  userAddress={account}
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

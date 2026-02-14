@@ -3,23 +3,36 @@ import { ethers } from 'ethers';
 import { useWallet } from '../context/WalletContext';
 
 export default function DepositPanel({ onSuccess }) {
-  const { contracts } = useWallet();
+  const { contracts, account } = useWallet();
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleDeposit = async () => {
     if (!amount || parseFloat(amount) <= 0) return;
     setLoading(true);
+    
+    console.log('💸 Initiating deposit...');
+    console.log('  Account:', account);
+    console.log('  Amount:', amount, 'HLUSD');
+    console.log('  Treasury contract:', await contracts.treasury.getAddress());
+    
     try {
       const tx = await contracts.treasury.deposit({
         value: ethers.parseEther(amount),
       });
+      console.log('📝 Transaction sent:', tx.hash);
+      console.log('  From:', tx.from);
+      console.log('  To:', tx.to);
+      console.log('  Value:', ethers.formatEther(tx.value), 'HLUSD');
+      
       onSuccess?.(`Depositing... TX: ${tx.hash}`, 'info');
       await tx.wait();
+      
+      console.log('✅ Deposit confirmed!');
       onSuccess?.(`Successfully deposited ${amount} HLUSD`, 'success', tx.hash);
       setAmount('');
     } catch (err) {
-      console.error('Deposit error:', err);
+      console.error('❌ Deposit error:', err);
       onSuccess?.(err.reason || err.message || 'Deposit failed', 'error');
     } finally {
       setLoading(false);
@@ -31,6 +44,26 @@ export default function DepositPanel({ onSuccess }) {
       <div className="card-header">
         <span className="card-title">💰 Inject Temporal Funds</span>
       </div>
+      
+      {/* Important Notice */}
+      <div style={{ 
+        background: 'rgba(234, 179, 8, 0.1)', 
+        border: '1px solid rgba(234, 179, 8, 0.3)',
+        borderRadius: '8px',
+        padding: '12px',
+        marginBottom: '1rem',
+        fontSize: '0.85rem'
+      }}>
+        <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--yellow)' }}>
+          ⚠️ Important: Account-Based Deposits
+        </div>
+        <div style={{ opacity: 0.9, fontSize: '0.8rem' }}>
+          Deposits are credited to the connected wallet: <strong>{account?.slice(0, 6)}...{account?.slice(-4)}</strong>
+          <br />
+          To view this balance, make sure you're connected to the same account.
+        </div>
+      </div>
+
       <div className="form-group">
         <label className="form-label">Amount (HLUSD)</label>
         <input

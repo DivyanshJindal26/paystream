@@ -28,7 +28,7 @@ contract SalaryStream {
     address public taxVault;
 
     /// @notice Seconds in 30 days for salary calculations
-    uint256 private constant SECONDS_PER_MONTH = 30 days;
+    uint256 private constant SECONDS_PER_MONTH = 5 minutes;
 
     // ========== INDEXING & ANALYTICS ==========
 

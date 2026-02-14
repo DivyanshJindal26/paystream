@@ -3,8 +3,10 @@ import { ethers } from 'ethers';
 import {
   TREASURY_ADDRESS,
   STREAM_ADDRESS,
+  OFFRAMP_ADDRESS,
   TREASURY_ABI,
   STREAM_ABI,
+  OFFRAMP_ABI,
 } from '../contracts';
 
 const HELA_CHAIN_ID = 666888;
@@ -16,16 +18,23 @@ export function WalletProvider({ children }) {
   const [account, setAccount] = useState(null);
   const [signer, setSigner] = useState(null);
   const [provider, setProvider] = useState(null);
-  const [contracts, setContracts] = useState({ treasury: null, salaryStream: null });
+  const [contracts, setContracts] = useState({ treasury: null, salaryStream: null, offRamp: null });
   const [chainId, setChainId] = useState(null);
   const [isCorrectNetwork, setIsCorrectNetwork] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
   const buildContracts = useCallback((signer) => {
-    return {
+    const contracts = {
       treasury: new ethers.Contract(TREASURY_ADDRESS, TREASURY_ABI, signer),
       salaryStream: new ethers.Contract(STREAM_ADDRESS, STREAM_ABI, signer),
     };
+    
+    // Only add OffRamp if address is set (not zero address)
+    if (OFFRAMP_ADDRESS && OFFRAMP_ADDRESS !== "0x0000000000000000000000000000000000000000") {
+      contracts.offRamp = new ethers.Contract(OFFRAMP_ADDRESS, OFFRAMP_ABI, signer);
+    }
+    
+    return contracts;
   }, []);
 
   const handleChainChanged = useCallback((chainIdHex) => {
@@ -36,15 +45,37 @@ export function WalletProvider({ children }) {
     window.location.reload();
   }, []);
 
-  const handleAccountsChanged = useCallback((accounts) => {
+  const handleAccountsChanged = useCallback(async (accounts) => {
     if (accounts.length === 0) {
+      console.log('🔌 Wallet disconnected');
       setAccount(null);
       setSigner(null);
-      setContracts({ treasury: null, salaryStream: null });
+      setContracts({ treasury: null, salaryStream: null, offRamp: null });
     } else {
-      setAccount(accounts[0]);
+      // Account changed - rebuild signer and contracts with new account
+      console.log('🔄 Account changed to:', accounts[0]);
+      try {
+        const p = new ethers.BrowserProvider(window.ethereum);
+        const s = await p.getSigner();
+        const network = await p.getNetwork();
+        const id = Number(network.chainId);
+        
+        setSigner(s);
+        setAccount(accounts[0]);
+        
+        // Rebuild contracts with new signer
+        if (id === HELA_CHAIN_ID) {
+          const newContracts = buildContracts(s);
+          setContracts(newContracts);
+          console.log('✅ Contracts rebuilt for new account');
+        }
+      } catch (err) {
+        console.error('❌ Failed to update signer on account change:', err);
+        // Fallback: just update account state
+        setAccount(accounts[0]);
+      }
     }
-  }, []);
+  }, [buildContracts]);
 
   useEffect(() => {
     if (!window.ethereum) return;
