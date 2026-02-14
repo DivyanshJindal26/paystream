@@ -1,0 +1,911 @@
+import { useState, useEffect, useCallback } from 'react';
+import { ethers } from 'ethers';
+import { useWallet } from '../context/WalletContext';
+import DepositPanel from '../components/DepositPanel';
+import CreateStreamForm from '../components/CreateStreamForm';
+import normalizeBigInts from '../utils/normalizeBigInts';
+
+export default function AdminDashboard() {
+  const { account, contracts, isCorrectNetwork } = useWallet();
+  const [balances, setBalances] = useState({
+    total: '0',
+    reserved: '0',
+    available: '0',
+  });
+  const [toasts, setToasts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [employeeList, setEmployeeList] = useState([]);
+  const [globalStats, setGlobalStats] = useState(null);
+  const [employerStats, setEmployerStats] = useState(null);
+
+  // Load employee list directly from contract (no events needed!)
+  const fetchEmployeesFromChain = useCallback(async () => {
+    if (!contracts.salaryStream || !account) return;
+    
+    try {
+      // Direct on-chain call - instant, no scanning
+      const employees = await contracts.salaryStream.getEmployeesByEmployer(account);
+      setEmployeeList(employees.map(addr => addr.toLowerCase()));
+    } catch (err) {
+      console.error('Failed to load employees from chain:', err);
+    }
+  }, [contracts.salaryStream, account]);
+
+  // Fetch global and employer-specific analytics
+  const fetchAnalytics = useCallback(async () => {
+    if (!contracts.salaryStream || !account) return;
+    
+    try {
+      const [global, employer] = await Promise.all([
+        contracts.salaryStream.getGlobalStats(),
+        contracts.salaryStream.getEmployerStats(account),
+      ]);
+
+      // Normalize BigInt values before setting state
+      setGlobalStats(normalizeBigInts({
+        totalStreams: global[0],
+        activeStreams: global[1],
+        totalReserved: global[2],
+        totalPaid: global[3],
+      }));
+
+      setEmployerStats(normalizeBigInts({
+        employeeCount: employer[0],
+        activeCount: employer[1],
+        totalReserved: employer[2],
+        totalPaid: employer[3],
+      }));
+    } catch (err) {
+      console.error('Failed to fetch analytics:', err);
+    }
+  }, [contracts.salaryStream, account]);
+
+  useEffect(() => {
+    fetchEmployeesFromChain();
+    fetchAnalytics();
+  }, [fetchEmployeesFromChain, fetchAnalytics]);
+
+  const addToast = useCallback((message, type = 'info', txHash = null) => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message, type, txHash }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 5000);
+  }, []);
+
+  const fetchBalances = useCallback(async () => {
+    if (!contracts.treasury || !account) return;
+    setLoading(true);
+    try {
+      const [total, reserved] = await Promise.all([
+        contracts.treasury.employerBalances(account),
+        contracts.treasury.employerReserved(account),
+      ]);
+      // Normalize BigInt before setting state
+      const totalStr = total.toString();
+      const reservedStr = reserved.toString();
+      const availableStr = (total - reserved).toString();
+      
+      setBalances({
+        total: totalStr,
+        reserved: reservedStr,
+        available: availableStr,
+      });
+    } catch (err) {
+      console.error('Fetch balances error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [contracts.treasury, account]);
+
+  useEffect(() => {
+    fetchBalances();
+    const interval = setInterval(fetchBalances, 15000);
+    return () => clearInterval(interval);
+  }, [fetchBalances]);
+
+  const handleTxResult = useCallback(
+    (message, type, txHash) => {
+      addToast(message, type, txHash);
+      if (type === 'success') {
+        setTimeout(fetchBalances, 2000);
+      }
+    },
+    [addToast, fetchBalances]
+  );
+
+  const handleStreamCreated = useCallback(async (employeeAddress, streamData) => {
+    // Refresh employee list and analytics from blockchain
+    await fetchEmployeesFromChain();
+    await fetchAnalytics();
+  }, [fetchEmployeesFromChain, fetchAnalytics]);
+
+  const handleStreamDeleted = useCallback(async (employeeAddress) => {
+    // Refresh analytics after stream deletion
+    await fetchEmployeesFromChain();
+    await fetchAnalytics();
+  }, [fetchEmployeesFromChain, fetchAnalytics]);
+
+  if (!account) {
+    return (
+      <div className="page">
+        <div className="empty-state">
+          <div className="empty-state-icon">🔌</div>
+          <div className="empty-state-title">Connect Your Wallet</div>
+          <div className="empty-state-text">
+            Connect MetaMask to access the Admin Console
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isCorrectNetwork) return null;
+
+  return (
+    <div className="dashboard">
+      {/* Toasts */}
+      <div className="toast-container">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast toast-${t.type}`}>
+            <span>
+              {t.type === 'success' && '✅ '}
+              {t.type === 'error' && '❌ '}
+              {t.type === 'info' && 'ℹ️ '}
+              {t.message}
+            </span>
+            {t.txHash && (
+              <a
+                href={`https://testnet-blockexplorer.helachain.com/tx/${t.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="toast-link"
+              >
+                View TX
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="dashboard-header">
+        <div>
+          <h1 className="dashboard-title">
+            🏢 HR Management Console
+          </h1>
+          <p className="dashboard-subtitle">
+            Complete on-chain payroll control system - manage treasury, create streams, monitor employees
+          </p>
+        </div>
+      </div>
+
+      {/* Treasury Stats */}
+      <div className="dashboard-full">
+        <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
+          <div className="card-header">
+            <span className="card-title">📊 Treasury Status</span>
+            <button
+              className="btn btn-outline"
+              style={{ width: 'auto', padding: '0.4rem 1rem', fontSize: '0.8rem' }}
+              onClick={fetchBalances}
+              disabled={loading}
+            >
+              {loading ? <span className="spinner" /> : '↻ Refresh'}
+            </button>
+          </div>
+          <div className="treasury-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+            <div className="stat-item">
+              <div className="stat-label">Total Deposited</div>
+              <div className="stat-value">{ethers.formatEther(balances.total)}</div>
+              <div className="form-hint">HLUSD</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Reserved for Streams</div>
+              <div className="stat-value purple">
+                {ethers.formatEther(balances.reserved)}
+              </div>
+              <div className="form-hint">HLUSD</div>
+            </div>
+            <div className="stat-item">
+              <div className="stat-label">Available</div>
+              <div className="stat-value green">
+                {ethers.formatEther(balances.available)}
+              </div>
+              <div className="form-hint">HLUSD</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Analytics Panel - Self-Indexing Dashboard */}
+        {employerStats && (
+          <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
+            <div className="card-header">
+              <span className="card-title">📈 Real-Time Analytics</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>⚡ On-chain indexed • Gas-free queries</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem' }}>
+              {/* Your Stats */}
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--cyan)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Your Payroll
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+                  <div className="stat-item">
+                    <div className="stat-label">Total Employees</div>
+                    <div className="stat-value cyan">{employerStats.employeeCount.toString()}</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-label">Active Streams</div>
+                    <div className="stat-value green">{employerStats.activeCount.toString()}</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-label">Your Reserved</div>
+                    <div className="stat-value purple">{parseFloat(ethers.formatEther(employerStats.totalReserved)).toFixed(2)}</div>
+                    <div className="form-hint">HLUSD</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-label">Your Paid</div>
+                    <div className="stat-value green">{parseFloat(ethers.formatEther(employerStats.totalPaid)).toFixed(2)}</div>
+                    <div className="form-hint">HLUSD</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Global Stats */}
+              {globalStats && (
+                <div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--purple)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Global Platform
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+                    <div className="stat-item">
+                      <div className="stat-label">Total Streams</div>
+                      <div className="stat-value">{globalStats.totalStreams.toString()}</div>
+                    </div>
+                    <div className="stat-item">
+                      <div className="stat-label">Active Now</div>
+                      <div className="stat-value green">{globalStats.activeStreams.toString()}</div>
+                    </div>
+                    <div className="stat-item">
+                      <div className="stat-label">Global Reserved</div>
+                      <div className="stat-value purple">{parseFloat(ethers.formatEther(globalStats.totalReserved)).toFixed(2)}</div>
+                      <div className="form-hint">HLUSD</div>
+                    </div>
+                    <div className="stat-item">
+                      <div className="stat-label">Global Paid</div>
+                      <div className="stat-value green">{parseFloat(ethers.formatEther(globalStats.totalPaid)).toFixed(2)}</div>
+                      <div className="form-hint">HLUSD</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Deposit + Create Stream */}
+      <div className="dashboard-grid">
+        <DepositPanel onSuccess={handleTxResult} />
+        <CreateStreamForm 
+          onSuccess={(msg, type, txHash, employeeAddr, streamData) => {
+            handleTxResult(msg, type, txHash);
+            if (type === 'success' && employeeAddr) {
+              handleStreamCreated(employeeAddr, streamData);
+            }
+          }} 
+        />
+      </div>
+
+      {/* Employee Management */}
+      <div className="dashboard-full" style={{ marginTop: '1.5rem' }}>
+        <EmployeeManager 
+          employeeList={employeeList}
+          onAddEmployee={(addr) => setEmployeeList((prev) => [...new Set([...prev, addr.toLowerCase()])])}
+          onRemoveEmployee={(addr) => setEmployeeList((prev) => prev.filter((a) => a !== addr.toLowerCase()))}
+          onStreamDeleted={handleStreamDeleted}
+        />
+      </div>
+    </div>
+  );
+}
+
+function EmployeeManager({ employeeList, onAddEmployee, onRemoveEmployee, onStreamDeleted }) {
+  const { contracts } = useWallet();
+  const [newAddress, setNewAddress] = useState('');
+  const [streams, setStreams] = useState({});
+  const [loading, setLoading] = useState({});
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'table'
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+
+  // Fetch all employee streams
+  const fetchStreams = useCallback(async () => {
+    if (!contracts.salaryStream || employeeList.length === 0) return;
+    
+    const newStreams = {};
+    const newLoading = {};
+    
+    for (const addr of employeeList) {
+      newLoading[addr] = true;
+    }
+    setLoading(newLoading);
+
+    const results = await Promise.allSettled(
+      employeeList.map(async (addr) => {
+        const exists = await contracts.salaryStream.hasStream(addr);
+        if (exists) {
+          const details = await contracts.salaryStream.getStreamDetails(addr);
+          const withdrawable = await contracts.salaryStream.getWithdrawable(addr);
+          // Normalize BigInt values before returning
+          return { 
+            addr, 
+            stream: normalizeBigInts(details), 
+            withdrawable: withdrawable.toString() 
+          };
+        }
+        return { addr, stream: null, withdrawable: '0' };
+      })
+    );
+
+    results.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        newStreams[employeeList[idx]] = result.value;
+      }
+      newLoading[employeeList[idx]] = false;
+    });
+
+    setStreams(newStreams);
+    setLoading(newLoading);
+  }, [contracts.salaryStream, employeeList]);
+
+  useEffect(() => {
+    fetchStreams();
+    const interval = setInterval(fetchStreams, 20000);
+    return () => clearInterval(interval);
+  }, [fetchStreams]);
+
+  const handleAddAddress = () => {
+    if (newAddress && ethers.isAddress(newAddress)) {
+      onAddEmployee(newAddress);
+      setNewAddress('');
+    }
+  };
+
+  const handleBulkAdd = () => {
+    const addresses = prompt('Paste employee addresses (comma or newline separated):');
+    if (!addresses) return;
+    
+    const parsed = addresses
+      .split(/[,\n]/)
+      .map((a) => a.trim())
+      .filter((a) => ethers.isAddress(a));
+    
+    parsed.forEach((addr) => onAddEmployee(addr));
+  };
+
+  const handleExport = () => {
+    // Safe export - employeeList contains addresses (strings), no BigInt
+    const data = JSON.stringify(employeeList, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `paystream-employees-${Date.now()}.json`;
+    a.click();
+  };
+
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const data = JSON.parse(ev.target.result);
+          if (Array.isArray(data)) {
+            data.filter((a) => ethers.isAddress(a)).forEach((addr) => onAddEmployee(addr));
+          }
+        } catch (err) {
+          alert('Invalid JSON file');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  const stats = {
+    total: employeeList.length,
+    active: Object.values(streams).filter((s) => s?.stream && !s.stream[8]).length,
+    paused: Object.values(streams).filter((s) => s?.stream && s.stream[8]).length,
+    noStream: employeeList.length - Object.values(streams).filter((s) => s?.stream).length,
+  };
+
+  return (
+    <div className="glass-card">
+      <div className="card-header" style={{ marginBottom: '1.5rem' }}>
+        <span className="card-title">👥 Employee Management ({stats.total})</span>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            className="btn btn-outline"
+            onClick={() => setViewMode(viewMode === 'grid' ? 'table' : 'grid')}
+            style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}
+          >
+            {viewMode === 'grid' ? '📋 Table' : '🎛️ Grid'}
+          </button>
+          <button
+            className="btn btn-outline"
+            onClick={fetchStreams}
+            style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}
+          >
+            ↻
+          </button>
+        </div>
+      </div>
+
+      {/* Stats Overview */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.5rem' }}>
+        <div className="stat-item">
+          <div className="stat-label">Total</div>
+          <div className="stat-value">{stats.total}</div>
+        </div>
+        <div className="stat-item">
+          <div className="stat-label">Active</div>
+          <div className="stat-value green">{stats.active}</div>
+        </div>
+        <div className="stat-item">
+          <div className="stat-label">Paused</div>
+          <div className="stat-value purple">{stats.paused}</div>
+        </div>
+        <div className="stat-item">
+          <div className="stat-label">No Stream</div>
+          <div className="stat-value">{stats.noStream}</div>
+        </div>
+      </div>
+
+      {/* Add Employee */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <label className="form-label">Add Employee</label>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <input
+            className="form-input"
+            type="text"
+            placeholder="0x..."
+            value={newAddress}
+            onChange={(e) => setNewAddress(e.target.value)}
+            style={{ marginBottom: 0 }}
+          />
+          <button
+            className="btn btn-cyan"
+            onClick={handleAddAddress}
+            disabled={!newAddress || !ethers.isAddress(newAddress)}
+            style={{ width: 'auto', padding: '0.75rem 1.5rem', minWidth: '100px' }}
+          >
+            ➕ Add
+          </button>
+          <button
+            className="btn btn-outline"
+            onClick={handleBulkAdd}
+            style={{ width: 'auto', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
+          >
+            📋 Bulk
+          </button>
+          <button
+            className="btn btn-outline"
+            onClick={handleImport}
+            style={{ width: 'auto', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
+          >
+            📥 Import
+          </button>
+          <button
+            className="btn btn-outline"
+            onClick={handleExport}
+            disabled={employeeList.length === 0}
+            style={{ width: 'auto', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
+          >
+            📤 Export
+          </button>
+        </div>
+      </div>
+
+      {/* Employee List */}
+      {employeeList.length === 0 ? (
+        <div className="empty-state" style={{ padding: '2rem 1rem' }}>
+          <div className="empty-state-icon">👤</div>
+          <div className="empty-state-text">No employees added yet. Add addresses above to manage streams.</div>
+        </div>
+      ) : viewMode === 'grid' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+          {employeeList.map((addr) => (
+            <EmployeeCard
+              key={addr}
+              address={addr}
+              streamData={streams[addr]}
+              loading={loading[addr]}
+              onRemove={() => onRemoveEmployee(addr)}
+              onRefresh={fetchStreams}
+              onEdit={() => {
+                setSelectedEmployee(addr);
+                setEditModalOpen(true);
+              }}
+              onStreamDeleted={onStreamDeleted}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmployeeTable
+          employees={employeeList}
+          streams={streams}
+          loading={loading}
+          onRemove={onRemoveEmployee}
+          onRefresh={fetchStreams}
+          onStreamDeleted={onStreamDeleted}
+        />
+      )}
+
+      {/* Edit Modal */}
+      {editModalOpen && (
+        <EditStreamModal
+          address={selectedEmployee}
+          streamData={streams[selectedEmployee]}
+          onClose={() => {
+            setEditModalOpen(false);
+            setSelectedEmployee(null);
+          }}
+          onSuccess={() => {
+            fetchStreams();
+            setEditModalOpen(false);
+            setSelectedEmployee(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function EmployeeCard({ address, streamData, loading, onRemove, onRefresh, onEdit, onStreamDeleted }) {
+  const { contracts } = useWallet();
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const formatDate = (ts) => {
+    const d = new Date(Number(ts) * 1000);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const handlePauseResume = async () => {
+    if (!contracts.salaryStream || !streamData?.stream) return;
+    setActionLoading(true);
+    try {
+      const tx = streamData.stream[8]
+        ? await contracts.salaryStream.resumeStream(address)
+        : await contracts.salaryStream.pauseStream(address);
+      await tx.wait();
+      onRefresh();
+    } catch (err) {
+      console.error('Pause/Resume error:', err);
+      alert(err.reason || err.message || 'Action failed');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!contracts.salaryStream) return;
+    if (!confirm(`Cancel stream for ${address.slice(0, 6)}...${address.slice(-4)}?`)) return;
+    setActionLoading(true);
+    try {
+      const tx = await contracts.salaryStream.cancelStream(address);
+      await tx.wait();
+      onStreamDeleted(address);
+      onRefresh();
+    } catch (err) {
+      console.error('Cancel error:', err);
+      alert(err.reason || err.message || 'Cancel failed');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="glass-card" style={{ padding: '1.25rem' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" style={{ width: 30, height: 30, margin: '1rem auto', borderWidth: 3 }} />
+        </div>
+      </div>
+    );
+  }
+
+  const stream = streamData?.stream;
+  const hasStream = !!stream;
+
+  return (
+    <div className="glass-card" style={{ padding: '1.25rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+        <div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', color: 'var(--cyan)', marginBottom: '0.5rem' }}>
+            {address.slice(0, 6)}...{address.slice(-4)}
+          </div>
+          {hasStream && (
+            <span className={`card-badge ${!stream[8] ? 'badge-active' : 'badge-paused'}`}>
+              {stream[8] ? 'Paused' : 'Active'}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => onRemove(address)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-dim)',
+            cursor: 'pointer',
+            fontSize: '1rem',
+            padding: '0.25rem',
+          }}
+          title="Remove from list"
+        >
+          ✕
+        </button>
+      </div>
+
+      {hasStream ? (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div>
+              <div className="stream-detail-label">Monthly</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {console.log(stream)}
+                {parseFloat(ethers.formatEther(BigInt(stream[2]) * 2592000n)).toFixed(2)}
+              </div>
+            </div>
+            <div>
+              <div className="stream-detail-label">Tax</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {stream[7]}%
+              </div>
+            </div>
+            <div>
+              <div className="stream-detail-label">Withdrawable</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--green)' }}>
+                {parseFloat(ethers.formatEther(streamData.withdrawable || '0')).toFixed(4)}
+              </div>
+            </div>
+            <div>
+              <div className="stream-detail-label">End Date</div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                {formatDate(stream[5])}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+            <button
+              className="btn btn-outline"
+              onClick={handlePauseResume}
+              disabled={actionLoading}
+              style={{ padding: '0.5rem', fontSize: '0.75rem' }}
+            >
+              {stream[8] ? '▶️' : '⏸️'}
+            </button>
+            <button
+              className="btn btn-outline"
+              onClick={handleCancel}
+              disabled={actionLoading}
+              style={{ padding: '0.5rem', fontSize: '0.75rem', color: 'var(--red)', borderColor: 'var(--red)' }}
+            >
+              🗑️
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '1rem 0', color: 'var(--text-dim)', fontSize: '0.85rem' }}>
+          No stream created yet
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmployeeTable({ employees, streams, loading, onRemove, onRefresh, onStreamDeleted }) {
+  const { contracts } = useWallet();
+  const [actionLoading, setActionLoading] = useState({});
+
+  const handleAction = async (address, action) => {
+    if (!contracts.salaryStream) return;
+    setActionLoading({ ...actionLoading, [address]: true });
+    try {
+      let tx;
+      const stream = streams[address]?.stream;
+      
+      if (action === 'pause') {
+        tx = await contracts.salaryStream.pauseStream(address);
+      } else if (action === 'resume') {
+        tx = await contracts.salaryStream.resumeStream(address);
+      } else if (action === 'cancel') {
+        if (!confirm(`Cancel stream for ${address.slice(0, 6)}...${address.slice(-4)}?`)) return;
+        tx = await contracts.salaryStream.cancelStream(address);
+      }
+      
+      await tx.wait();
+      if (action === 'cancel') {
+        onStreamDeleted(address);
+      }
+      onRefresh();
+    } catch (err) {
+      console.error('Action error:', err);
+      alert(err.reason || err.message || 'Action failed');
+    } finally {
+      setActionLoading({ ...actionLoading, [address]: false });
+    }
+  };
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--glass-border)' }}>
+            <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.5px' }}>Address</th>
+            <th style={{ padding: '0.75rem', textAlign: 'left', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.5px' }}>Status</th>
+            <th style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.5px' }}>Monthly</th>
+            <th style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.5px' }}>Tax</th>
+            <th style={{ padding: '0.75rem', textAlign: 'right', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.5px' }}>Withdrawable</th>
+            <th style={{ padding: '0.75rem', textAlign: 'center', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.5px' }}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {employees.map((addr) => {
+            const streamData = streams[addr];
+            const stream = streamData?.stream;
+            const hasStream = !!stream;
+            const isLoading = loading[addr] || actionLoading[addr];
+
+            return (
+              <tr key={addr} style={{ borderBottom: '1px solid var(--border)' }}>
+                <td style={{ padding: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--cyan)', fontSize: '0.8rem' }}>
+                  {addr.slice(0, 6)}...{addr.slice(-4)}
+                </td>
+                <td style={{ padding: '0.75rem' }}>
+                  {hasStream ? (
+                    <span className={`card-badge ${!stream[9] ? 'badge-active' : 'badge-paused'}`} style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}>
+                      {stream[9] ? 'Paused' : 'Active'}
+                    </span>
+                  ) : (
+                    <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>—</span>
+                  )}
+                </td>
+                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>
+                  {hasStream ? parseFloat(ethers.formatEther(BigInt(stream[2]) * 2592000n)).toFixed(2) : '—'}
+                </td>
+                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>
+                  {hasStream ? `${stream[7].toString()}%` : '—'}
+                </td>
+                <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: 'var(--green)' }}>
+                  {hasStream ? parseFloat(ethers.formatEther(streamData.withdrawable || '0')).toFixed(4) : '—'}
+                </td>
+                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                  <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
+                    {hasStream && (
+                      <>
+                        <button
+                          onClick={() => handleAction(addr, stream[9] ? 'resume' : 'pause')}
+                          disabled={isLoading}
+                          style={{
+                            padding: '0.35rem 0.6rem',
+                            fontSize: '0.7rem',
+                            background: 'transparent',
+                            border: '1px solid var(--glass-border)',
+                            borderRadius: '6px',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {stream[9] ? '▶️' : '⏸️'}
+                        </button>
+                        <button
+                          onClick={() => handleAction(addr, 'cancel')}
+                          disabled={isLoading}
+                          style={{
+                            padding: '0.35rem 0.6rem',
+                            fontSize: '0.7rem',
+                            background: 'transparent',
+                            border: '1px solid var(--red)',
+                            borderRadius: '6px',
+                            color: 'var(--red)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => onRemove(addr)}
+                      style={{
+                        padding: '0.35rem 0.6rem',
+                        fontSize: '0.7rem',
+                        background: 'transparent',
+                        border: '1px solid var(--glass-border)',
+                        borderRadius: '6px',
+                        color: 'var(--text-dim)',
+                        cursor: 'pointer',
+                      }}
+                      title="Remove from list"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function EditStreamModal({ address, streamData, onClose, onSuccess }) {
+  // Note: Contract doesn't support direct modification
+  // This modal explains the workflow: cancel + recreate
+  const stream = streamData?.stream;
+
+  return (
+    <div className="network-warning-overlay" onClick={onClose}>
+      <div className="glass-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, padding: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>✏️ Modify Stream</h3>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-dim)',
+              cursor: 'pointer',
+              fontSize: '1.5rem',
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div style={{ marginBottom: '1.5rem', padding: '1rem', borderRadius: '8px', background: 'var(--cyan-dim)', border: '1px solid rgba(0,245,255,0.2)' }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--cyan)', marginBottom: '0.5rem', fontWeight: 600 }}>
+            ℹ️ How to Modify
+          </div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            The contract doesn't support direct stream modification. To change parameters:
+            <ol style={{ marginTop: '0.5rem', paddingLeft: '1.25rem' }}>
+              <li>Cancel the current stream</li>
+              <li>Create a new stream with updated parameters</li>
+            </ol>
+          </div>
+        </div>
+
+        {stream && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Current Configuration
+            </div>
+            <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.85rem' }}>
+              <div>Monthly Salary: <strong>{ethers.formatEther(BigInt(stream[2]) * 2592000n)} HLUSD</strong></div>
+              <div>Tax: <strong>{stream[7]}%</strong></div>
+              <div>Status: <strong>{stream[9] ? 'Paused' : 'Active'}</strong></div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button className="btn btn-outline" onClick={onClose} style={{ flex: 1 }}>
+            Cancel
+          </button>
+          <button className="btn btn-cyan" onClick={onClose} style={{ flex: 1 }}>
+            Got It
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
