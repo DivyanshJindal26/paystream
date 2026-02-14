@@ -213,9 +213,17 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
         <button
           onClick={handleConvert}
           disabled={converting || !amount || !liveRate}
-          className="convert-btn"
+          className="btn btn-cyan"
+          style={{ width: '100%', marginTop: '1rem' }}
         >
-          {converting ? 'Converting...' : 'Convert to INR'}
+          {converting ? (
+            <>
+              <span className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+              Converting...
+            </>
+          ) : (
+            '💱 Convert to INR'
+          )}
         </button>
       </div>
 

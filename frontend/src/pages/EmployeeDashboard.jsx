@@ -134,12 +134,18 @@ export default function EmployeeDashboard() {
       fetchStream();
     } catch (err) {
       console.error('Withdraw error:', err);
-      const errorMsg = err.reason || err.message || 'Withdrawal failed';
+      let errorMsg = err.reason || err.message || 'Withdrawal failed';
+      
+      // User-friendly error messages
       if (errorMsg.includes('Nothing to withdraw')) {
-        addToast('No earnings available to withdraw yet', 'error');
-      } else {
-        addToast(errorMsg, 'error');
+        errorMsg = 'No earnings available to withdraw yet. Wait for more time to pass.';
+      } else if (errorMsg.includes('Stream paused')) {
+        errorMsg = 'Stream is paused. Contact your employer to resume it.';
+      } else if (errorMsg.includes('Insufficient')) {
+        errorMsg = 'Treasury has insufficient balance. Contact your employer.';
       }
+      
+      addToast(errorMsg, 'error');
     } finally {
       setWithdrawing(false);
     }

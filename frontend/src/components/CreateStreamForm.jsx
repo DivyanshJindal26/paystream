@@ -37,7 +37,18 @@ export default function CreateStreamForm({ onSuccess }) {
       setTax('');
     } catch (err) {
       console.error('Create stream error:', err);
-      onSuccess?.(err.reason || err.message || 'Failed to create stream', 'error');
+      let errorMsg = err.reason || err.message || 'Failed to create stream';
+      
+      // User-friendly error messages
+      if (errorMsg.includes('Not admin')) {
+        errorMsg = 'Only the contract admin can create streams. Make sure you\'re connected with the deployer account.';
+      } else if (errorMsg.includes('Insufficient balance')) {
+        errorMsg = 'Insufficient treasury balance. Deposit more funds first.';
+      } else if (errorMsg.includes('Stream exists')) {
+        errorMsg = 'This employee already has an active stream.';
+      }
+      
+      onSuccess?.(errorMsg, 'error');
     } finally {
       setLoading(false);
     }
@@ -47,6 +58,10 @@ export default function CreateStreamForm({ onSuccess }) {
     <div className="glass-card">
       <div className="card-header">
         <span className="card-title">🌀 Open Time Stream</span>
+      </div>
+
+      <div className="form-hint" style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--purple-dim)', borderRadius: 'var(--radius-xs)', fontSize: '0.85rem' }}>
+        ℹ️ Only the contract admin (deployer) can create streams. Ensure you're connected with the correct account.
       </div>
 
       <div className="form-group">
