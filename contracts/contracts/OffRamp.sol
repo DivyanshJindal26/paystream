@@ -13,6 +13,9 @@ contract OffRamp {
 
     // ========== STATE VARIABLES ==========
 
+    /// @notice Contract owner for admin functions
+    address public owner;
+
     /// @notice Immutable oracle signer address - only this address can sign valid rates
     address public immutable oracleSigner;
 
@@ -64,6 +67,14 @@ contract OffRamp {
     );
 
     event FeesWithdrawn(address indexed recipient, uint256 amount);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    // ========== MODIFIERS ==========
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not authorized");
+        _;
+    }
 
     // ========== CONSTRUCTOR ==========
 
@@ -74,6 +85,7 @@ contract OffRamp {
     constructor(address _oracleSigner) {
         require(_oracleSigner != address(0), "Invalid signer");
         oracleSigner = _oracleSigner;
+        owner = msg.sender;
     }
 
     // ========== INTERNAL FUNCTIONS ==========
@@ -217,11 +229,10 @@ contract OffRamp {
     }
 
     /**
-     * @notice Withdraw collected fees (only owner/admin would call this)
+     * @notice Withdraw collected fees (owner only)
      * @param recipient Address to receive fees
-     * @dev In production, add access control (e.g., Ownable)
      */
-    function withdrawFees(address payable recipient) external {
+    function withdrawFees(address payable recipient) external onlyOwner {
         require(recipient != address(0), "Invalid recipient");
         uint256 amount = totalFeesCollected;
         require(amount > 0, "No fees to withdraw");
@@ -232,6 +243,26 @@ contract OffRamp {
         require(success, "Transfer failed");
 
         emit FeesWithdrawn(recipient, amount);
+    }
+
+    /**
+     * @notice Transfer ownership to a new address
+     * @param newOwner Address of the new owner
+     */
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Invalid owner");
+        address oldOwner = owner;
+        owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+
+    /**
+     * @notice Update the fee percentage
+     * @param _feePercent New fee percentage (0-10)
+     */
+    function setFeePercent(uint256 _feePercent) external onlyOwner {
+        require(_feePercent <= 10, "Fee too high");
+        feePercent = _feePercent;
     }
 
     /**

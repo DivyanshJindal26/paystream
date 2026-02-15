@@ -104,24 +104,30 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
   describe("SalaryStream - Creation", function () {
     beforeEach(async function () {
+      // Owner creates company and adds employees
+      await salaryStream.connect(owner).createCompany("Test Company");
+      await salaryStream.connect(owner).addEmployee(1, employee.address);
+      await salaryStream.connect(owner).addEmployee(1, otherUser.address);
+      await salaryStream.connect(owner).addEmployee(1, taxVault.address);
+      
       // Admin deposits native HLUSD
       const depositAmount = ethers.parseEther("1000");
       await treasury.connect(owner).deposit({ value: depositAmount });
     });
 
-    it("Should have admin set to deployer", async function () {
-      expect(await salaryStream.admin()).to.equal(owner.address);
+    it.skip("Should have admin set to deployer", async function () {
+      // Skipped: admin() function removed in company governance model
+      // Owner is automatically CEO when creating company
     });
 
     it("Should only allow admin to create streams", async function () {
       await expect(
-        salaryStream.connect(otherUser).createStream(
-          employee.address,
+        salaryStream.connect(otherUser).createStream(1, employee.address,
           MONTHLY_SALARY,
           12,
           10
         )
-      ).to.be.revertedWith("Not admin");
+      ).to.be.revertedWith("Not HR or CEO");
     });
 
     it("Should create stream with correct parameters", async function () {
@@ -129,8 +135,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       const taxPercent = 10;
 
       await expect(
-        salaryStream.connect(owner).createStream(
-          employee.address,
+        salaryStream.connect(owner).createStream(1, employee.address,
           MONTHLY_SALARY,
           durationMonths,
           taxPercent
@@ -147,32 +152,32 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
     });
 
     it("Should prevent duplicate streams for same employee", async function () {
-      await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+      await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
 
       await expect(
-        salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 6, 5)
+        salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 6, 5)
       ).to.be.revertedWith("Stream exists");
     });
 
     it("Should reject invalid parameters", async function () {
       // Zero address
       await expect(
-        salaryStream.connect(owner).createStream(ethers.ZeroAddress, MONTHLY_SALARY, 12, 10)
+        salaryStream.connect(owner).createStream(1, ethers.ZeroAddress, MONTHLY_SALARY, 12, 10)
       ).to.be.revertedWith("Invalid employee");
 
       // Zero salary
       await expect(
-        salaryStream.connect(owner).createStream(employee.address, 0, 12, 10)
+        salaryStream.connect(owner).createStream(1, employee.address, 0, 12, 10)
       ).to.be.revertedWith("Salary must be > 0");
 
       // Zero duration
       await expect(
-        salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 0, 10)
+        salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 0, 10)
       ).to.be.revertedWith("Duration must be > 0");
 
       // Invalid tax
       await expect(
-        salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 101)
+        salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 101)
       ).to.be.revertedWith("Tax percent must be <= 100");
     });
 
@@ -180,7 +185,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       const durationMonths = 12;
       const totalSalary = MONTHLY_SALARY * BigInt(durationMonths);
 
-      await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, durationMonths, 10);
+      await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, durationMonths, 10);
 
       const reserved = await treasury.employerReserved(owner.address);
       expect(reserved).to.equal(totalSalary);
@@ -189,11 +194,15 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
   describe("SalaryStream - Per-Second Streaming", function () {
     beforeEach(async function () {
+      // Setup: Create company and add employee
+      await salaryStream.connect(owner).createCompany("Test Company");
+      await salaryStream.connect(owner).addEmployee(1, employee.address);
+      
       // Setup: Deposit and create stream
       const depositAmount = ethers.parseEther("1000");
       await treasury.connect(owner).deposit({ value: depositAmount });
 
-      await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+      await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
     });
 
     it("Should calculate earnings per second correctly", async function () {
@@ -256,11 +265,15 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
   describe("SalaryStream - Withdrawal & Tax (Native HLUSD)", function () {
     beforeEach(async function () {
+      // Setup: Create company and add employee
+      await salaryStream.connect(owner).createCompany("Test Company");
+      await salaryStream.connect(owner).addEmployee(1, employee.address);
+      
       // Setup: Deposit native HLUSD and create stream with 10% tax
       const depositAmount = ethers.parseEther("1000");
       await treasury.connect(owner).deposit({ value: depositAmount });
 
-      await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+      await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
     });
 
     it("Should allow employee to withdraw with correct tax deduction", async function () {
@@ -343,11 +356,15 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
     });
 
     it("Should handle zero tax correctly", async function () {
+      // Create company and add otherUser as employee
+      await salaryStream.connect(owner).createCompany("Test Company");
+      await salaryStream.connect(owner).addEmployee(1, otherUser.address);
+      
       // Create stream with 0% tax
       const depositAmount = ethers.parseEther("1000");
       await treasury.connect(owner).deposit({ value: depositAmount });
       
-      await salaryStream.connect(owner).createStream(otherUser.address, MONTHLY_SALARY, 6, 0);
+      await salaryStream.connect(owner).createStream(1, otherUser.address, MONTHLY_SALARY, 6, 0);
       await time.increase(SECONDS_PER_MONTH);
 
       const withdrawable = await salaryStream.getWithdrawable(otherUser.address);
@@ -367,10 +384,14 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
   describe("SalaryStream - Admin Functions", function () {
     beforeEach(async function () {
+      // Setup: Create company and add employee
+      await salaryStream.connect(owner).createCompany("Test Company");
+      await salaryStream.connect(owner).addEmployee(1, employee.address);
+      
       const depositAmount = ethers.parseEther("1000");
       await treasury.connect(owner).deposit({ value: depositAmount });
 
-      await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+      await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
     });
 
     it("Should allow admin to pause stream", async function () {
@@ -403,15 +424,15 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
     it("Should only allow admin to pause/resume/cancel", async function () {
       await expect(
         salaryStream.connect(otherUser).pauseStream(employee.address)
-      ).to.be.revertedWith("Not admin");
+      ).to.be.revertedWith("Not HR or CEO");
 
       await expect(
         salaryStream.connect(otherUser).resumeStream(employee.address)
-      ).to.be.revertedWith("Not admin");
+      ).to.be.revertedWith("Not HR or CEO");
 
       await expect(
         salaryStream.connect(otherUser).cancelStream(employee.address)
-      ).to.be.revertedWith("Not admin");
+      ).to.be.revertedWith("Not HR or CEO");
     });
 
     it("Should allow admin to update tax vault", async function () {
@@ -424,18 +445,22 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       expect(await salaryStream.taxVault()).to.equal(newTaxVault);
     });
 
-    it("Should allow admin transfer", async function () {
-      await salaryStream.connect(owner).transferAdmin(otherUser.address);
-      expect(await salaryStream.admin()).to.equal(otherUser.address);
+    it.skip("Should allow admin transfer", async function () {
+      // Skipped: admin() function removed in company governance model
+      // Use getCompanyRoles() to check CEO assignments instead
     });
   });
 
   describe("SalaryStream - View Functions (HR Dashboard)", function () {
     beforeEach(async function () {
+      // Setup: Create company and add employee
+      await salaryStream.connect(owner).createCompany("Test Company");
+      await salaryStream.connect(owner).addEmployee(1, employee.address);
+      
       const depositAmount = ethers.parseEther("1000");
       await treasury.connect(owner).deposit({ value: depositAmount });
 
-      await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+      await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
     });
 
     it("Should return stream details", async function () {
@@ -465,6 +490,13 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
   describe("Self-Indexing & Analytics", function () {
     beforeEach(async function () {
+      // Setup: Create companies and add employees
+      await salaryStream.connect(owner).createCompany("Owner Company");
+      await salaryStream.connect(employer).createCompany("Employer Company");
+      await salaryStream.connect(owner).addEmployee(1, employee.address);
+      await salaryStream.connect(owner).addEmployee(1, otherUser.address);
+      await salaryStream.connect(owner).addEmployee(1, taxVault.address);
+      
       // Setup: Deposit funds for multiple employers
       const depositAmount = ethers.parseEther("10000");
       await treasury.connect(owner).deposit({ value: depositAmount });
@@ -473,7 +505,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
     describe("Employee Indexing", function () {
       it("Should add employee to allEmployees array on first stream", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
 
         const allEmployees = await salaryStream.getAllEmployees();
         expect(allEmployees).to.include(employee.address);
@@ -481,11 +513,11 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       });
 
       it("Should not duplicate employees in allEmployees when creating multiple streams", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         // Cancel and recreate
         await salaryStream.connect(owner).cancelStream(employee.address);
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 6, 5);
 
         const allEmployees = await salaryStream.getAllEmployees();
         expect(allEmployees.length).to.equal(1);
@@ -494,9 +526,9 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       it("Should track multiple employees correctly", async function () {
         const [emp1, emp2, emp3] = [employee, taxVault, otherUser];
         
-        await salaryStream.connect(owner).createStream(emp1.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(emp2.address, MONTHLY_SALARY, 6, 5);
-        await salaryStream.connect(owner).createStream(emp3.address, MONTHLY_SALARY, 3, 0);
+        await salaryStream.connect(owner).createStream(1, emp1.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, emp2.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, emp3.address, MONTHLY_SALARY, 3, 0);
 
         const allEmployees = await salaryStream.getAllEmployees();
         expect(allEmployees.length).to.equal(3);
@@ -508,7 +540,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       it("Should set isEmployee mapping correctly", async function () {
         expect(await salaryStream.isEmployee(employee.address)).to.be.false;
 
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         expect(await salaryStream.isEmployee(employee.address)).to.be.true;
       });
@@ -516,7 +548,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
     describe("Employer-Employee Mapping", function () {
       it("Should add employee to employer's list", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
 
         const employees = await salaryStream.getEmployeesByEmployer(owner.address);
         expect(employees).to.include(employee.address);
@@ -526,9 +558,9 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       it("Should track multiple employees for one employer", async function () {
         const [emp1, emp2, emp3] = [employee, taxVault, otherUser];
         
-        await salaryStream.connect(owner).createStream(emp1.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(emp2.address, MONTHLY_SALARY, 6, 5);
-        await salaryStream.connect(owner).createStream(emp3.address, MONTHLY_SALARY, 3, 0);
+        await salaryStream.connect(owner).createStream(1, emp1.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, emp2.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, emp3.address, MONTHLY_SALARY, 3, 0);
 
         const employees = await salaryStream.getEmployeesByEmployer(owner.address);
         expect(employees.length).to.equal(3);
@@ -538,8 +570,8 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       });
 
       it("Should separate employees by employer", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(taxVault.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, taxVault.address, MONTHLY_SALARY, 6, 5);
 
         const ownerEmployees = await salaryStream.getEmployeesByEmployer(owner.address);
         const employerEmployees = await salaryStream.getEmployeesByEmployer(employer.address);
@@ -559,7 +591,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
     describe("Active Employees Tracking", function () {
       it("Should add employee to activeEmployees on stream creation", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
 
         const activeEmployees = await salaryStream.getActiveEmployees();
         expect(activeEmployees).to.include(employee.address);
@@ -570,9 +602,9 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
         const [emp1, emp2, emp3] = [employee, taxVault, otherUser];
         
         // Create streams for 3 employees
-        await salaryStream.connect(owner).createStream(emp1.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(emp2.address, MONTHLY_SALARY, 6, 5);
-        await salaryStream.connect(owner).createStream(emp3.address, MONTHLY_SALARY, 3, 0);
+        await salaryStream.connect(owner).createStream(1, emp1.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, emp2.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, emp3.address, MONTHLY_SALARY, 3, 0);
 
         let activeEmployees = await salaryStream.getActiveEmployees();
         expect(activeEmployees.length).to.equal(3);
@@ -588,7 +620,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       });
 
       it("Should handle swap-and-pop when removing last element", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
 
         let activeEmployees = await salaryStream.getActiveEmployees();
         expect(activeEmployees.length).to.equal(1);
@@ -602,9 +634,9 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       it("Should handle swap-and-pop when removing first element", async function () {
         const [emp1, emp2, emp3] = [employee, taxVault, otherUser];
         
-        await salaryStream.connect(owner).createStream(emp1.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(emp2.address, MONTHLY_SALARY, 6, 5);
-        await salaryStream.connect(owner).createStream(emp3.address, MONTHLY_SALARY, 3, 0);
+        await salaryStream.connect(owner).createStream(1, emp1.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, emp2.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, emp3.address, MONTHLY_SALARY, 3, 0);
 
         // Cancel first employee
         await salaryStream.connect(owner).cancelStream(emp1.address);
@@ -615,8 +647,8 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       });
 
       it("Should track active employees across multiple employers", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(taxVault.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, taxVault.address, MONTHLY_SALARY, 6, 5);
 
         const activeEmployees = await salaryStream.getActiveEmployees();
         expect(activeEmployees.length).to.equal(2);
@@ -630,19 +662,19 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
         let stats = await salaryStream.getGlobalStats();
         expect(stats[0]).to.equal(0);
 
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         stats = await salaryStream.getGlobalStats();
         expect(stats[0]).to.equal(1);
 
-        await salaryStream.connect(owner).createStream(taxVault.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, taxVault.address, MONTHLY_SALARY, 6, 5);
         
         stats = await salaryStream.getGlobalStats();
         expect(stats[0]).to.equal(2);
       });
 
       it("Should not decrement totalStreamsCreated on cancellation", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         let stats = await salaryStream.getGlobalStats();
         expect(stats[0]).to.equal(1);
@@ -658,8 +690,8 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
         expect(stats[1]).to.equal(0);
 
         // Create streams
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(taxVault.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, taxVault.address, MONTHLY_SALARY, 6, 5);
         
         stats = await salaryStream.getGlobalStats();
         expect(stats[1]).to.equal(2);
@@ -675,19 +707,19 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
         const totalSalary1 = MONTHLY_SALARY * BigInt(12);
         const totalSalary2 = MONTHLY_SALARY * BigInt(6);
 
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         let stats = await salaryStream.getGlobalStats();
         expect(stats[2]).to.equal(totalSalary1);
 
-        await salaryStream.connect(owner).createStream(taxVault.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, taxVault.address, MONTHLY_SALARY, 6, 5);
         
         stats = await salaryStream.getGlobalStats();
         expect(stats[2]).to.equal(totalSalary1 + totalSalary2);
       });
 
       it("Should decrease totalReservedGlobal on withdrawal", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         const initialStats = await salaryStream.getGlobalStats();
         const initialReserved = initialStats[2];
@@ -701,7 +733,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       });
 
       it("Should track totalPaidGlobal on withdrawals", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         let stats = await salaryStream.getGlobalStats();
         expect(stats[3]).to.equal(0);
@@ -716,7 +748,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       });
 
       it("Should accumulate totalPaidGlobal across multiple withdrawals", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         // First withdrawal
         await time.increase(SECONDS_PER_MONTH);
@@ -737,7 +769,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
     describe("Employer-Specific Analytics", function () {
       it("Should track employer stats correctly", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         const stats = await salaryStream.getEmployerStats(owner.address);
         expect(stats[0]).to.equal(1);
@@ -747,7 +779,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       });
 
       it("Should update employer totalPaid on withdrawal", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
 
         // Advance time and withdraw
         await time.increase(SECONDS_PER_MONTH);
@@ -761,8 +793,8 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       it("Should separate stats by employer", async function () {
         // Note: Current contract only allows admin to create streams
         // So all streams belong to owner (admin)
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(taxVault.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, taxVault.address, MONTHLY_SALARY, 6, 5);
 
         const ownerStats = await salaryStream.getEmployerStats(owner.address);
         const employerStats = await salaryStream.getEmployerStats(employer.address);
@@ -776,8 +808,8 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       it("Should update activeCount on stream cancellation", async function () {
         const [emp1, emp2] = [employee, taxVault];
         
-        await salaryStream.connect(owner).createStream(emp1.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(emp2.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, emp1.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, emp2.address, MONTHLY_SALARY, 6, 5);
 
         let stats = await salaryStream.getEmployerStats(owner.address);
         expect(stats[1]).to.equal(2);
@@ -797,7 +829,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       });
 
       it("Should calculate total withdrawable for one active stream", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         await time.increase(SECONDS_PER_MONTH);
 
@@ -811,9 +843,9 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       it("Should calculate total withdrawable for multiple active streams", async function () {
         const [emp1, emp2, emp3] = [employee, taxVault, otherUser];
         
-        await salaryStream.connect(owner).createStream(emp1.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(emp2.address, MONTHLY_SALARY, 6, 5);
-        await salaryStream.connect(owner).createStream(emp3.address, MONTHLY_SALARY, 3, 0);
+        await salaryStream.connect(owner).createStream(1, emp1.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, emp2.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, emp3.address, MONTHLY_SALARY, 3, 0);
 
         await time.increase(SECONDS_PER_MONTH);
 
@@ -826,7 +858,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       });
 
       it("Should update total withdrawable after withdrawal", async function () {
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         await time.increase(SECONDS_PER_MONTH);
 
@@ -841,8 +873,8 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       it("Should exclude cancelled streams from total withdrawable", async function () {
         const [emp1, emp2] = [employee, taxVault];
         
-        await salaryStream.connect(owner).createStream(emp1.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(emp2.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, emp1.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, emp2.address, MONTHLY_SALARY, 6, 5);
 
         await time.increase(SECONDS_PER_MONTH);
 
@@ -862,8 +894,8 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
       it("Should return consistent data across all view functions", async function () {
         const [emp1, emp2] = [employee, taxVault];
         
-        await salaryStream.connect(owner).createStream(emp1.address, MONTHLY_SALARY, 12, 10);
-        await salaryStream.connect(owner).createStream(emp2.address, MONTHLY_SALARY, 6, 5);
+        await salaryStream.connect(owner).createStream(1, emp1.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, emp2.address, MONTHLY_SALARY, 6, 5);
 
         const allEmployees = await salaryStream.getAllEmployees();
         const activeEmployees = await salaryStream.getActiveEmployees();
@@ -883,7 +915,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
       it("Should maintain consistency after stream lifecycle", async function () {
         // Create
-        await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+        await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
         
         let globalStats = await salaryStream.getGlobalStats();
         expect(globalStats[0]).to.equal(1);
@@ -909,10 +941,14 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
 
   describe("Security & Gas Optimization", function () {
     it("Should follow CEI pattern in withdraw", async function () {
+      // Setup company and employee
+      await salaryStream.connect(owner).createCompany("Test Company");
+      await salaryStream.connect(owner).addEmployee(1, employee.address);
+      
       const depositAmount = ethers.parseEther("1000");
       await treasury.connect(owner).deposit({ value: depositAmount });
 
-      await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+      await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
       await time.increase(SECONDS_PER_MONTH);
 
       // Should complete without issues (CEI pattern prevents reentrancy)
@@ -926,11 +962,15 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
     });
 
     it("Should minimize storage writes for gas optimization", async function () {
+      // Setup company and employee
+      await salaryStream.connect(owner).createCompany("Test Company");
+      await salaryStream.connect(owner).addEmployee(1, employee.address);
+      
       // Earnings calculated dynamically, not stored continuously
       const depositAmount = ethers.parseEther("1000");
       await treasury.connect(owner).deposit({ value: depositAmount });
 
-      await salaryStream.connect(owner).createStream(employee.address, MONTHLY_SALARY, 12, 10);
+      await salaryStream.connect(owner).createStream(1, employee.address, MONTHLY_SALARY, 12, 10);
       
       await time.increase(3600);
       
@@ -941,3 +981,7 @@ describe("PayStream - Treasury & SalaryStream (Native HLUSD)", function () {
     });
   });
 });
+
+
+
+

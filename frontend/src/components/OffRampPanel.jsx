@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
+import { useDecimal } from '../context/DecimalContext';
 import {
   fetchLiveRates,
   getSignedRate,
@@ -9,18 +10,19 @@ import {
 } from '../services/offRampService';
 
 const OffRampPanel = ({ offRampContract, userAddress }) => {
+  const { formatValue } = useDecimal();
   const [amount, setAmount] = useState('');
   const [liveRate, setLiveRate] = useState(null);
   const [loading, setLoading] = useState(false);
   const [converting, setConverting] = useState(false);
   const [estimatedINR, setEstimatedINR] = useState(null);
   const [conversionHistory, setConversionHistory] = useState([]);
-  const [stats, setStats] = useState({ volume: '0', fees: '0', count: 0 });
+  const [stats, setStats] = useState({ volume: 0n, fees: 0n, count: 0 });
   const [error, setError] = useState('');
   const [rateTimestamp, setRateTimestamp] = useState(null);
 
-  // Oracle private key from environment
-  const ORACLE_PRIVATE_KEY = import.meta.env.VITE_ORACLE_PRIVATE_KEY;
+  // Oracle key is only used as a dev fallback — backend signs in production
+  const ORACLE_PRIVATE_KEY = import.meta.env.VITE_ORACLE_PRIVATE_KEY || null;
 
   // Fetch live rate on component mount and every 30 seconds
   useEffect(() => {
@@ -94,8 +96,8 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
       console.log('Loading OffRamp stats...');
       const [volume, fees, count] = await offRampContract.getStats();
       const statsData = {
-        volume: ethers.formatEther(volume),
-        fees: ethers.formatEther(fees),
+        volume: volume,
+        fees: fees,
         count: Number(count)
       };
       console.log('Stats loaded:', statsData);
@@ -112,16 +114,11 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
       return;
     }
 
-    if (!ORACLE_PRIVATE_KEY) {
-      setError('Oracle private key not configured');
-      return;
-    }
-
     setConverting(true);
     setError('');
 
     try {
-      // Get signed rate data
+      // Get signed rate data (from backend; falls back to local in dev)
       const signedData = await getSignedRate(ORACLE_PRIVATE_KEY);
 
       // Verify rate is still valid
@@ -159,17 +156,29 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
 
   const isRateFresh = rateTimestamp && isRateValid(rateTimestamp);
 
+  // Calculate average conversion size
+  const avgConversion = stats.count > 0 
+    ? parseFloat(ethers.formatEther(stats.volume)) / stats.count 
+    : 0;
+
+  // Calculate fee percentage efficiency
+  const feePercentage = stats.volume > 0n 
+    ? (parseFloat(ethers.formatEther(stats.fees)) / parseFloat(ethers.formatEther(stats.volume))) * 100 
+    : 1.0;
+
   return (
     <div className="offramp-panel">
-      <h2>💰 HLUSD → INR OffRamp</h2>
+      <h2>HLUSD to INR OffRamp</h2>
 
-      {/* Live Rate Display */}
-      <div className="rate-display">
-        <div className="rate-card">
+      {/* Live Rate & Conversion Form - Side by Side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '30px' }}>
+        {/* Live Rate Display */}
+        <div className="rate-display">
+          <div className="rate-card">
           <div className="rate-header">
             <h3>Live Exchange Rate</h3>
             {isRateFresh && (
-              <span className="verified-badge">✓ Rate Verified On-Chain</span>
+              <span className="verified-badge">Verified On-Chain</span>
             )}
           </div>
           {liveRate ? (
@@ -187,11 +196,11 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
           ) : (
             <div className="loading">Fetching rates...</div>
           )}
+          </div>
         </div>
-      </div>
 
-      {/* Conversion Form */}
-      <div className="conversion-form">
+        {/* Conversion Form */}
+        <div className="conversion-form">
         <h3>Convert HLUSD to INR</h3>
         
         <div className="input-group">
@@ -241,26 +250,85 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
               Converting...
             </>
           ) : (
-            '💱 Convert to INR'
+            'Convert to INR'
           )}
         </button>
+        </div>
       </div>
 
       {/* Platform Stats */}
       <div className="platform-stats">
-        <h3>Platform Statistics</h3>
+        <h3>OffRamp Platform Analytics</h3>
         <div className="stats-grid">
           <div className="stat-item">
             <div className="stat-label">Total Volume</div>
-            <div className="stat-value">{parseFloat(stats.volume).toFixed(4)} HLUSD</div>
+            <div className="stat-value">{formatValue(stats.volume)} HLUSD</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+              ≈ ₹{(parseFloat(ethers.formatEther(stats.volume)) * (liveRate?.compositeRate || 83)).toFixed(2)}
+            </div>
           </div>
           <div className="stat-item">
             <div className="stat-label">Fees Collected</div>
-            <div className="stat-value">{parseFloat(stats.fees).toFixed(4)} HLUSD</div>
+            <div className="stat-value">{formatValue(stats.fees)} HLUSD</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+              1% platform fee
+            </div>
           </div>
           <div className="stat-item">
             <div className="stat-label">Total Conversions</div>
             <div className="stat-value">{stats.count}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+              Lifetime transactions
+            </div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-label">Exchange Rate</div>
+            <div className="stat-value" style={{ color: 'var(--accent)' }}>
+              {liveRate ? `₹${liveRate.compositeRate.toFixed(2)}` : 'Loading...'}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+              Per 1 HLUSD
+            </div>
+          </div>
+        </div>
+
+        {/* Additional Analytics Row */}
+        <div className="stats-grid" style={{ marginTop: '1rem' }}>
+          <div className="stat-item">
+            <div className="stat-label">Avg Conversion</div>
+            <div className="stat-value" style={{ color: 'var(--green)' }}>
+              {avgConversion.toFixed(4)} HLUSD
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+              ≈ ₹{(avgConversion * (liveRate?.compositeRate || 83)).toFixed(2)} per tx
+            </div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-label">Fee Efficiency</div>
+            <div className="stat-value" style={{ color: 'var(--amber)' }}>
+              {feePercentage.toFixed(2)}%
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+              Platform fee rate
+            </div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-label">Net Conversion</div>
+            <div className="stat-value" style={{ color: 'var(--text-secondary)' }}>
+              {(parseFloat(ethers.formatEther(stats.volume)) - parseFloat(ethers.formatEther(stats.fees))).toFixed(4)} HLUSD
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+              After fees deducted
+            </div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-label">Conversion Status</div>
+            <div className="stat-value" style={{ color: stats.count > 0 ? 'var(--green)' : 'var(--text-dim)' }}>
+              {stats.count > 0 ? 'ACTIVE' : 'IDLE'}
+            </div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+              Platform activity
+            </div>
           </div>
         </div>
       </div>
@@ -284,9 +352,9 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
                 {conversionHistory.map((conv) => (
                   <tr key={conv.id}>
                     <td>{conv.timestamp}</td>
-                    <td>{parseFloat(conv.hlusdAmount).toFixed(4)}</td>
+                    <td>{conv.hlusdAmount}</td>
                     <td>₹{conv.inrAmount}</td>
-                    <td>{parseFloat(conv.feeAmount).toFixed(4)}</td>
+                    <td>{conv.feeAmount}</td>
                     <td>₹{conv.rate}</td>
                   </tr>
                 ))}
@@ -301,23 +369,32 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
         )}
       </div>
 
-      <style jsx>{`
+      <style>{`
         .offramp-panel {
-          max-width: 800px;
+          max-width: 1200px;
           margin: 0 auto;
           padding: 20px;
         }
 
+        .offramp-panel h2 {
+          color: var(--text-primary);
+          font-size: 1.5rem;
+          margin-bottom: 1.5rem;
+        }
+
         .rate-display {
-          margin-bottom: 30px;
+          height: 100%;
         }
 
         .rate-card {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
+          background: var(--bg-card);
+          color: var(--text-primary);
           padding: 25px;
-          border-radius: 15px;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+          border-radius: 12px;
+          border: 1px solid var(--border);
+          height: 100%;
+          display: flex;
+          flex-direction: column;
         }
 
         .rate-header {
@@ -330,45 +407,51 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
         .rate-header h3 {
           margin: 0;
           font-size: 1.2rem;
+          color: var(--text-primary);
         }
 
         .verified-badge {
-          background: rgba(255, 255, 255, 0.2);
+          background: rgba(255, 255, 255, 0.08);
           padding: 5px 12px;
           border-radius: 20px;
           font-size: 0.85rem;
-          border: 1px solid rgba(255, 255, 255, 0.3);
+          border: 1px solid var(--border);
+          color: var(--green);
         }
 
         .main-rate {
           font-size: 2.5rem;
           font-weight: bold;
           margin-bottom: 10px;
+          color: var(--text-primary);
+          font-family: 'JetBrains Mono', monospace;
         }
 
         .rate-breakdown {
           font-size: 1rem;
-          opacity: 0.9;
+          color: var(--text-secondary);
           margin-bottom: 10px;
         }
 
         .rate-source {
-          opacity: 0.7;
+          color: var(--text-dim);
           font-size: 0.85rem;
         }
 
         .conversion-form {
-          background: white;
+          background: var(--bg-card);
           padding: 25px;
           border-radius: 12px;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-          margin-bottom: 30px;
+          border: 1px solid var(--border);
+          height: 100%;
+          display: flex;
+          flex-direction: column;
         }
 
         .conversion-form h3 {
           margin-top: 0;
           margin-bottom: 20px;
-          color: #333;
+          color: var(--text-primary);
         }
 
         .input-group {
@@ -379,33 +462,36 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
           display: block;
           margin-bottom: 8px;
           font-weight: 600;
-          color: #555;
+          color: var(--text-secondary);
         }
 
         .input-group input {
           width: 100%;
           padding: 12px;
           font-size: 1rem;
-          border: 2px solid #e0e0e0;
+          border: 1px solid var(--border);
           border-radius: 8px;
+          background: var(--bg-secondary);
+          color: var(--text-primary);
           transition: border-color 0.3s;
+          box-sizing: border-box;
         }
 
         .input-group input:focus {
           outline: none;
-          border-color: #667eea;
+          border-color: var(--accent);
         }
 
         .estimation {
-          background: #f8f9ff;
+          background: var(--bg-secondary);
           padding: 15px;
           border-radius: 8px;
           margin-bottom: 20px;
-          border: 1px solid #e0e7ff;
+          border: 1px solid var(--border);
         }
 
         .est-row {
-          color: #000000;
+          color: var(--text-secondary);
           display: flex;
           justify-content: space-between;
           padding: 8px 0;
@@ -413,12 +499,12 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
         }
 
         .est-row.total {
-          border-top: 2px solid #667eea;
+          border-top: 1px solid var(--border);
           margin-top: 10px;
           padding-top: 12px;
           font-weight: bold;
           font-size: 1.1rem;
-          color: #667eea;
+          color: var(--text-primary);
         }
 
         .convert-btn {
@@ -426,120 +512,136 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
           padding: 15px;
           font-size: 1.1rem;
           font-weight: bold;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
+          background: var(--accent);
+          color: #000;
           border: none;
           border-radius: 8px;
           cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
+          transition: opacity 0.2s;
         }
 
         .convert-btn:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+          opacity: 0.85;
         }
 
         .convert-btn:disabled {
-          opacity: 0.5;
+          opacity: 0.4;
           cursor: not-allowed;
         }
 
-        .error-message {
-          background: #fee;
-          color: #c33;
+        .offramp-panel .error-message {
+          background: rgba(255, 68, 68, 0.1);
+          color: var(--red);
           padding: 12px;
           border-radius: 6px;
           margin-bottom: 15px;
-          border: 1px solid #fcc;
+          border: 1px solid rgba(255, 68, 68, 0.3);
         }
 
         .platform-stats {
-          background: white;
+          background: var(--bg-card);
           padding: 25px;
           border-radius: 12px;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+          border: 1px solid var(--border);
           margin-bottom: 30px;
         }
 
         .platform-stats h3 {
           margin-top: 0;
           margin-bottom: 20px;
-          color: #333;
+          color: var(--text-primary);
         }
 
         .stats-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-          gap: 20px;
+          gap: 16px;
         }
 
         .stat-item {
           text-align: center;
           padding: 15px;
-          background: #f8f9ff;
+          background: var(--bg-secondary);
           border-radius: 8px;
+          border: 1px solid var(--border);
         }
 
         .stat-label {
           font-size: 0.9rem;
-          color: #666;
+          color: var(--text-dim);
           margin-bottom: 8px;
         }
 
         .stat-value {
           font-size: 1.5rem;
           font-weight: bold;
-          color: #667eea;
+          color: var(--text-primary);
+          font-family: 'JetBrains Mono', monospace;
         }
 
         .conversion-history {
-          background: white;
+          background: var(--bg-card);
           padding: 25px;
           border-radius: 12px;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+          border: 1px solid var(--border);
         }
 
         .conversion-history h3 {
           margin-top: 0;
           margin-bottom: 20px;
-          color: #333;
+          color: var(--text-primary);
         }
 
         .history-table {
           overflow-x: auto;
         }
 
-        table {
+        .offramp-panel table {
           width: 100%;
           border-collapse: collapse;
         }
 
-        th {
-          background: #f8f9ff;
+        .offramp-panel th {
+          background: var(--bg-secondary);
           padding: 12px;
           text-align: left;
           font-weight: 600;
-          color: #555;
-          border-bottom: 2px solid #e0e7ff;
+          color: var(--text-secondary);
+          border-bottom: 1px solid var(--border);
         }
 
-        td {
+        .offramp-panel td {
           padding: 12px;
-          border-bottom: 1px solid #f0f0f0;
+          border-bottom: 1px solid var(--border);
+          color: var(--text-secondary);
         }
 
-        tbody tr:hover {
-          background: #f8f9ff;
+        .offramp-panel tbody tr:hover {
+          background: var(--bg-secondary);
+        }
+
+        .no-history {
+          text-align: center;
+          padding: 2rem;
+          color: var(--text-dim);
+        }
+
+        .no-history small {
+          color: var(--text-dim);
         }
 
         .loading {
           text-align: center;
           padding: 20px;
           font-style: italic;
-          opacity: 0.7;
+          color: var(--text-dim);
         }
 
         @media (max-width: 768px) {
+          .offramp-panel > div[style*="grid-template-columns"] {
+            grid-template-columns: 1fr !important;
+          }
+
           .main-rate {
             font-size: 2rem;
           }
@@ -548,11 +650,12 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
             grid-template-columns: 1fr;
           }
 
-          table {
+          .offramp-panel table {
             font-size: 0.85rem;
           }
 
-          th, td {
+          .offramp-panel th,
+          .offramp-panel td {
             padding: 8px;
           }
         }

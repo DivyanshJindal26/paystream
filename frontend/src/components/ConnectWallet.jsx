@@ -23,7 +23,7 @@ export default function ConnectWallet() {
           Connecting...
         </>
       ) : (
-        <>⚡ Connect Wallet</>
+        <>Connect Wallet</>
       )}
     </button>
   );

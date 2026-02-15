@@ -240,7 +240,7 @@ export default function LogsViewer() {
     return (
       <div className="logs-viewer">
         <div className="logs-error">
-          ⚠️ Please connect your wallet to access logs
+          Please connect your wallet to access logs
         </div>
         <div className="debug-info">
           <p>Debug Info:</p>
@@ -268,10 +268,10 @@ export default function LogsViewer() {
             Auto-refresh ({refreshInterval / 1000}s)
           </label>
           <button onClick={handleExport} className="btn-export">
-            📥 Export
+            Export
           </button>
           <button onClick={handleCleanup} className="btn-cleanup">
-            🗑️ Cleanup Old Logs
+            Cleanup Old Logs
           </button>
         </div>
       </div>
@@ -397,10 +397,10 @@ export default function LogsViewer() {
 
         <div className="filter-actions">
           <button onClick={applyFilters} className="btn-apply">
-            🔍 Apply Filters
+            Apply Filters
           </button>
           <button onClick={resetFilters} className="btn-reset">
-            🔄 Reset
+            Reset
           </button>
         </div>
       </div>
@@ -408,7 +408,7 @@ export default function LogsViewer() {
       {/* Error */}
       {error && (
         <div className="logs-error">
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
@@ -467,7 +467,7 @@ export default function LogsViewer() {
                         className="btn-details"
                         onClick={() => setSelectedLog(log)}
                       >
-                        👁️ Details
+                        Details
                       </button>
                     </td>
                   </tr>

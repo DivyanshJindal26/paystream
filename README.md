@@ -141,6 +141,54 @@ npx hardhat test
 
 ---
 
+## Docker Deployment
+
+For the easiest setup, use Docker to run the entire stack (frontend, backend, MongoDB) with a single command:
+
+```bash
+# 1. Copy and configure environment
+cp .env.docker.example .env.docker
+# Edit .env.docker with your values (MongoDB password, Oracle key, etc.)
+
+# 2. Start all services
+docker-compose --env-file .env.docker up -d
+
+# 3. Access the application
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:5000
+# MongoDB: localhost:27017
+```
+
+### Docker Commands
+
+```bash
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Rebuild after code changes
+docker-compose up -d --build
+
+# View service status
+docker-compose ps
+```
+
+or use the Makefile shortcuts:
+
+```bash
+make setup    # Setup environment
+make up       # Start services
+make logs-f   # Follow logs
+make down     # Stop services
+make rebuild  # Rebuild and restart
+```
+
+See [DOCKER_README.md](DOCKER_README.md) for detailed documentation.
+
+---
+
 ## Tech Stack
 
 - **Solidity ^0.8.9** — Smart contracts

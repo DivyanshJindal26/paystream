@@ -11,7 +11,7 @@ export default function LogsPage() {
     return (
       <div className="page-container">
         <div className="error-message">
-          <h2>⚠️ Wallet Not Connected</h2>
+          <h2>Wallet Not Connected</h2>
           <p>Please connect your wallet to access the logs.</p>
         </div>
       </div>
@@ -22,7 +22,7 @@ export default function LogsPage() {
     return (
       <div className="page-container">
         <div className="error-message">
-          <h2>🔒 Access Denied</h2>
+          <h2>Access Denied</h2>
           <p>Only the admin wallet can access system logs.</p>
           <p className="admin-hint">
             Admin Address: {adminAddress || 'Not configured'}

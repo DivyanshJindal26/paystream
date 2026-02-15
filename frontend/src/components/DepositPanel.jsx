@@ -42,20 +42,20 @@ export default function DepositPanel({ onSuccess }) {
   return (
     <div className="glass-card">
       <div className="card-header">
-        <span className="card-title">💰 Inject Temporal Funds</span>
+        <span className="card-title">Deposit Funds</span>
       </div>
       
       {/* Important Notice */}
       <div style={{ 
-        background: 'rgba(234, 179, 8, 0.1)', 
-        border: '1px solid rgba(234, 179, 8, 0.3)',
-        borderRadius: '8px',
+        background: 'var(--amber-dim)', 
+        border: '1px solid rgba(245, 158, 11, 0.2)',
+        borderRadius: 'var(--radius-sm)',
         padding: '12px',
         marginBottom: '1rem',
         fontSize: '0.85rem'
       }}>
-        <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--yellow)' }}>
-          ⚠️ Important: Account-Based Deposits
+        <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--amber)' }}>
+          Important: Account-Based Deposits
         </div>
         <div style={{ opacity: 0.9, fontSize: '0.8rem' }}>
           Deposits are credited to the connected wallet: <strong>{account?.slice(0, 6)}...{account?.slice(-4)}</strong>
@@ -89,7 +89,7 @@ export default function DepositPanel({ onSuccess }) {
             Processing...
           </>
         ) : (
-          <>⚡ Inject Temporal Funds</>
+          <>Deposit Funds</>
         )}
       </button>
     </div>

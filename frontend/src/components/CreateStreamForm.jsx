@@ -57,11 +57,11 @@ export default function CreateStreamForm({ onSuccess }) {
   return (
     <div className="glass-card">
       <div className="card-header">
-        <span className="card-title">🌀 Open Time Stream</span>
+        <span className="card-title">Create Stream</span>
       </div>
 
-      <div className="form-hint" style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--purple-dim)', borderRadius: 'var(--radius-xs)', fontSize: '0.85rem' }}>
-        ℹ️ Only the contract admin (deployer) can create streams. Ensure you're connected with the correct account.
+      <div className="form-hint" style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--accent-dim)', borderRadius: 'var(--radius-xs)', fontSize: '0.85rem' }}>
+        Only the contract admin (deployer) can create streams. Ensure you're connected with the correct account.
       </div>
 
       <div className="form-group">
@@ -129,7 +129,7 @@ export default function CreateStreamForm({ onSuccess }) {
             Opening Stream...
           </>
         ) : (
-          <>🌀 Open Time Stream</>
+          <>Create Stream</>
         )}
       </button>
     </div>

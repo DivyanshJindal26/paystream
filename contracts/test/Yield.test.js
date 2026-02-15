@@ -26,8 +26,7 @@ describe("Treasury Yield System", function () {
     // Link contracts
     await treasury.setSalaryStream(await salaryStream.getAddress());
 
-    // Transfer admin to employer for testing
-    await salaryStream.transferAdmin(employer.address);
+    // Company setup handled individually in each test
   });
 
   describe("Yield Configuration", function () {
@@ -56,12 +55,15 @@ describe("Treasury Yield System", function () {
 
   describe("Yield Accrual", function () {
     beforeEach(async function () {
+      // Employer creates company and adds employee
+      await salaryStream.connect(employer).createCompany("Test Company");
+      await salaryStream.connect(employer).addEmployee(1, employee.address);
+      
       // Employer deposits enough to cover stream
       await treasury.connect(employer).deposit({ value: ethers.parseEther("4000") });
 
       // Create stream to reserve funds
-      await salaryStream.connect(employer).createStream(
-        employee.address,
+      await salaryStream.connect(employer).createStream(1, employee.address,
         ethers.parseEther("500"), // 500 HLUSD/month
         6, // 6 months
         10 // 10% tax
@@ -128,9 +130,12 @@ describe("Treasury Yield System", function () {
 
   describe("Claiming Yield", function () {
     beforeEach(async function () {
+      // Employer creates company and adds employee
+      await salaryStream.connect(employer).createCompany("Test Company");
+      await salaryStream.connect(employer).addEmployee(1, employee.address);
+      
       await treasury.connect(employer).deposit({ value: ethers.parseEther("50000") });
-      await salaryStream.connect(employer).createStream(
-        employee.address,
+      await salaryStream.connect(employer).createStream(1, employee.address,
         ethers.parseEther("3000"),
         12,
         10
@@ -271,9 +276,12 @@ const accruedNow = await treasury.getAccruedYield(employer.address);
 
   describe("Yield Stats View Functions", function () {
     beforeEach(async function () {
+      // Employer creates company and adds employee
+      await salaryStream.connect(employer).createCompany("Test Company");
+      await salaryStream.connect(employer).addEmployee(1, employee.address);
+      
       await treasury.connect(employer).deposit({ value: ethers.parseEther("50000") });
-      await salaryStream.connect(employer).createStream(
-        employee.address,
+      await salaryStream.connect(employer).createStream(1, employee.address,
         ethers.parseEther("3000"),
         12,
         10
@@ -307,9 +315,11 @@ const accruedNow = await treasury.getAccruedYield(employer.address);
 
   describe("Yield with Stream Lifecycle", function () {
     it("Should continue accruing yield while stream is active", async function () {
+      await salaryStream.connect(employer).createCompany("Test Company");
+      await salaryStream.connect(employer).addEmployee(1, employee.address);
+      
       await treasury.connect(employer).deposit({ value: ethers.parseEther("4000") });
-      await salaryStream.connect(employer).createStream(
-        employee.address,
+      await salaryStream.connect(employer).createStream(1, employee.address,
         ethers.parseEther("500"),
         6,
         10
@@ -327,9 +337,11 @@ const accruedNow = await treasury.getAccruedYield(employer.address);
     });
 
     it("Should accrue yield even when stream is paused", async function () {
+      await salaryStream.connect(employer).createCompany("Test Company");
+      await salaryStream.connect(employer).addEmployee(1, employee.address);
+      
       await treasury.connect(employer).deposit({ value: ethers.parseEther("4000") });
-      await salaryStream.connect(employer).createStream(
-        employee.address,
+      await salaryStream.connect(employer).createStream(1, employee.address,
         ethers.parseEther("500"),
         6,
         10
@@ -344,9 +356,11 @@ const accruedNow = await treasury.getAccruedYield(employer.address);
     });
 
     it("Should reduce reserved amount when employee withdraws (affecting future yield)", async function () {
+      await salaryStream.connect(employer).createCompany("Test Company");
+      await salaryStream.connect(employer).addEmployee(1, employee.address);
+      
       await treasury.connect(employer).deposit({ value: ethers.parseEther("5000") });
-      await salaryStream.connect(employer).createStream(
-        employee.address,
+      await salaryStream.connect(employer).createStream(1, employee.address,
         ethers.parseEther("3000"),
         1, // 1 month
         10
@@ -370,3 +384,4 @@ const accruedNow = await treasury.getAccruedYield(employer.address);
     });
   });
 });
+

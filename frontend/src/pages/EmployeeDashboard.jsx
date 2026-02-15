@@ -4,9 +4,11 @@ import { useWallet } from '../context/WalletContext';
 import StreamCard from '../components/StreamCard';
 import OffRampPanel from '../components/OffRampPanel';
 import normalizeBigInts from '../utils/normalizeBigInts';
+import { useDecimal } from '../context/DecimalContext';
 
 export default function EmployeeDashboard() {
   const { account, contracts, isCorrectNetwork } = useWallet();
+  const { formatValue } = useDecimal();
   const [stream, setStream] = useState(null);
   const [hasStream, setHasStream] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -162,7 +164,7 @@ export default function EmployeeDashboard() {
     return (
       <div className="page">
         <div className="empty-state">
-          <div className="empty-state-icon">🔌</div>
+          <div className="empty-state-icon">--</div>
           <div className="empty-state-title">Connect Your Wallet</div>
           <div className="empty-state-text">
             Connect MetaMask to access the Employee Portal
@@ -181,9 +183,9 @@ export default function EmployeeDashboard() {
         {toasts.map((t) => (
           <div key={t.id} className={`toast toast-${t.type}`}>
             <span>
-              {t.type === 'success' && '✅ '}
-              {t.type === 'error' && '❌ '}
-              {t.type === 'info' && 'ℹ️ '}
+              {t.type === 'success' && ''}
+              {t.type === 'error' && ''}
+              {t.type === 'info' && ''}
               {t.message}
             </span>
             {t.txHash && (
@@ -201,7 +203,7 @@ export default function EmployeeDashboard() {
       </div>
 
       <div className="dashboard-header">
-        <h1 className="dashboard-title">👤 Employee Portal</h1>
+        <h1 className="dashboard-title">Employee Portal</h1>
         <p className="dashboard-subtitle">
           Monitor your salary stream and claim earnings
         </p>
@@ -215,8 +217,8 @@ export default function EmployeeDashboard() {
           </div>
         ) : !hasStream ? (
           <div className="empty-state">
-            <div className="empty-state-icon">🌌</div>
-            <div className="empty-state-title">No Active Time Stream Detected</div>
+            <div className="empty-state-icon">--</div>
+            <div className="empty-state-title">No Active Stream Detected</div>
             <div className="empty-state-text">
               Your employer hasn't opened a salary stream for this address yet.
               <br />
@@ -286,7 +288,7 @@ function BonusVault({ bonuses }) {
   return (
     <div className="glass-card bonus-vault-panel">
       <div className="card-header">
-        <span className="card-title">🎁 Performance Bonus Vault</span>
+        <span className="card-title">Performance Bonus Vault</span>
         <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{bonuses.length} bonus{bonuses.length !== 1 ? 'es' : ''}</span>
       </div>
 
@@ -303,10 +305,10 @@ function BonusVault({ bonuses }) {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>{isClaimed ? '✅' : isReady ? '💰' : '🔒'}</span>
+                  <span style={{ fontSize: '1.5rem' }}>{isClaimed ? '--' : isReady ? '!!' : '||'}</span>
                   <div>
                     <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '1.1rem', color: isReady ? 'var(--green)' : isClaimed ? 'var(--text-dim)' : 'var(--text-primary)' }}>
-                      {parseFloat(ethers.formatEther(b.amount)).toFixed(4)} HLUSD
+                      {formatValue(b.amount)} HLUSD
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
                       Unlock: {new Date(b.unlockTime * 1000).toLocaleString()}
@@ -314,7 +316,7 @@ function BonusVault({ bonuses }) {
                   </div>
                 </div>
                 <span className={`card-badge ${isClaimed ? 'badge-paused' : isReady ? 'badge-active' : ''}`}
-                  style={!isClaimed && !isReady ? { background: 'var(--purple-dim)', color: 'var(--purple)', border: '1px solid rgba(124,58,237,0.3)' } : {}}>
+                  style={!isClaimed && !isReady ? { background: 'var(--accent-dim)', color: 'var(--text-dim)', border: '1px solid var(--border)' } : {}}>
                   {isClaimed ? 'Claimed' : isReady ? 'Ready' : 'Locked'}
                 </span>
               </div>
@@ -322,13 +324,13 @@ function BonusVault({ bonuses }) {
               {!isClaimed && !isReady && (
                 <div className="bonus-countdown">
                   <div className="bonus-countdown-bar" style={{ width: `${Math.max(0, Math.min(100, (1 - remaining / 86400) * 100))}%` }} />
-                  <span className="bonus-countdown-text">⏱️ {fmtCountdown(remaining)}</span>
+                  <span className="bonus-countdown-text">{fmtCountdown(remaining)}</span>
                 </div>
               )}
 
               {isReady && (
                 <div style={{ fontSize: '0.8rem', color: 'var(--green)', marginTop: '0.25rem', fontWeight: 600 }}>
-                  ✨ Included in your next withdrawal!
+                  Included in your next withdrawal!
                 </div>
               )}
             </div>
@@ -347,13 +349,13 @@ function EmployeeExplanationPanels() {
   const panels = [
     {
       key: 'streaming',
-      icon: '⏱️',
+      icon: '',
       title: 'How Salary Streaming Works',
       content: 'Your salary streams in real-time, every second. The rate is your monthly salary divided by seconds in a month. You can withdraw your earned HLUSD at any time. Tax is automatically deducted at the configured rate and sent to the tax vault.',
     },
     {
       key: 'bonuses',
-      icon: '🎁',
+      icon: '',
       title: 'How Bonuses Unlock',
       content: 'Performance bonuses are scheduled by your employer with a specific unlock date. When the countdown reaches zero, the bonus becomes "Ready" and will be automatically included in your next withdrawal. Bonuses are subject to the same tax rate as your salary.',
     },

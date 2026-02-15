@@ -2,6 +2,7 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import Stream from '../models/Stream.js';
 import LoggerService from '../services/loggerService.js';
+import { requireOwnership } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ const handleValidationErrors = (req, res, next) => {
 };
 
 // Get all streams for an employer
-router.get('/:employerAddress', async (req, res) => {
+router.get('/:employerAddress', requireOwnership('employerAddress'), async (req, res) => {
   try {
     const { employerAddress } = req.params;
     const { status } = req.query;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useWallet } from '../context/WalletContext';
+import { useDecimal } from '../context/DecimalContext';
 import normalizeBigInts from '../utils/normalizeBigInts';
 
 /**
@@ -22,6 +23,7 @@ import normalizeBigInts from '../utils/normalizeBigInts';
  */
 export default function EarningsTicker({ employeeAddress }) {
   const { contracts } = useWallet();
+  const { formatValue } = useDecimal();
   const [grossValue, setGrossValue] = useState('0.000000');
   const [netValue, setNetValue] = useState('0.000000');
   
@@ -150,9 +152,10 @@ export default function EarningsTicker({ employeeAddress }) {
       const taxAmount = (grossWithdrawable * taxPercentBigInt) / 100n;
       const netWithdrawable = grossWithdrawable - taxAmount;
 
-      // Format for display
-      const grossFormatted = ethers.formatEther(grossWithdrawable);
-      const netFormatted = ethers.formatEther(netWithdrawable);
+      // Format for display using decimal context
+      const grossFormatted = formatValue(grossWithdrawable);
+      console.log(grossFormatted)
+      const netFormatted = formatValue(netWithdrawable);
 
       setGrossValue(grossFormatted);
       setNetValue(netFormatted);
@@ -182,7 +185,7 @@ export default function EarningsTicker({ employeeAddress }) {
     <div className="earnings-ticker">
       <div className="earnings-label">
         You Will Receive (After {streamData.taxPercent}% Tax)
-        {streamData.paused && <span style={{ color: 'var(--red)', marginLeft: '0.5rem' }}>⏸️ PAUSED</span>}
+        {streamData.paused && <span style={{ color: 'var(--red)', marginLeft: '0.5rem' }}>PAUSED</span>}
       </div>
       <div className="earnings-value">
         {netValue}
@@ -239,8 +242,8 @@ function StreamCountdown({ endTime }) {
   if (!timeLeft) return null;
 
   return (
-    <div className="form-hint" style={{ marginTop: '0.75rem', textAlign: 'center', color: 'var(--cyan)' }}>
-      ⏰ {timeLeft}
+    <div className="form-hint" style={{ marginTop: '0.75rem', textAlign: 'center', color: 'var(--text-dim)' }}>
+      {timeLeft} remaining
     </div>
   );
 }

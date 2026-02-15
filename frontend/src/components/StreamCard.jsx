@@ -1,7 +1,9 @@
 import { ethers } from 'ethers';
+import { useDecimal } from '../context/DecimalContext';
 import EarningsTicker from './EarningsTicker';
 
 export default function StreamCard({ stream, account, onWithdraw, withdrawing, pendingBonusTotal }) {
+  const { formatValue } = useDecimal();
   if (!stream || stream[0] === ethers.ZeroAddress) return null;
 
   const formatDate = (ts) => {
@@ -24,7 +26,7 @@ export default function StreamCard({ stream, account, onWithdraw, withdrawing, p
   return (
     <div className="stream-card">
       <div className="card-header">
-        <span className="card-title">⏳ Salary Stream</span>
+        <span className="card-title">Salary Stream</span>
         <span className={`card-badge ${isActive && !hasEnded ? 'badge-active' : 'badge-paused'}`}>
           {hasEnded ? 'Ended' : isActive ? 'Active' : 'Paused'}
         </span>
@@ -40,13 +42,13 @@ export default function StreamCard({ stream, account, onWithdraw, withdrawing, p
         <div className="stream-detail">
           <div className="stream-detail-label">Monthly Salary</div>
           <div className="stream-detail-value">
-            {ethers.formatEther(monthlySalary)} HLUSD
+            {formatValue(monthlySalary)} HLUSD
           </div>
         </div>
         <div className="stream-detail">
           <div className="stream-detail-label">Rate / Second</div>
           <div className="stream-detail-value">
-            {ethers.formatEther(BigInt(stream[2]))} HLUSD
+            {formatValue(BigInt(stream[2]))} HLUSD
           </div>
         </div>
         <div className="stream-detail">
@@ -73,15 +75,15 @@ export default function StreamCard({ stream, account, onWithdraw, withdrawing, p
           marginTop: '1rem',
           padding: '0.75rem 1rem',
           borderRadius: 'var(--radius-sm)',
-          background: 'rgba(124, 58, 237, 0.08)',
-          border: '1px solid rgba(124, 58, 237, 0.2)',
+          background: 'var(--accent-dim)',
+          border: '1px solid var(--border)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--purple)', fontWeight: 600 }}>🎁 Bonus Ready</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--purple)' }}>
-            +{parseFloat(ethers.formatEther(pendingBonusTotal)).toFixed(4)} HLUSD
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>Bonus Ready</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text-secondary)' }}>
+            +{formatValue(pendingBonusTotal)} HLUSD
           </span>
         </div>
       )}
@@ -99,7 +101,7 @@ export default function StreamCard({ stream, account, onWithdraw, withdrawing, p
               Claiming...
             </>
           ) : (
-            <>💎 Claim Earned Time</>
+            <>Claim Earned</>
           )}
         </button>
       )}

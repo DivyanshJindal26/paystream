@@ -24,11 +24,16 @@ describe("Bonus System", function () {
 
     // Link contracts
     await treasury.setSalaryStream(await salaryStream.getAddress());
-    await salaryStream.transferAdmin(employer.address);
+
+    // Setup: Employer creates company and adds employees
+    await salaryStream.connect(employer).createCompany("Test Company");
+    await salaryStream.connect(employer).addEmployee(1, employee.address);
+    await salaryStream.connect(employer).addEmployee(1, employee2.address);
 
     // Setup: Employer deposits and creates stream (3000 reserved = 500 * 6)
     await treasury.connect(employer).deposit({ value: ethers.parseEther("5000") });
     await salaryStream.connect(employer).createStream(
+      1, // companyId
       employee.address,
       ethers.parseEther("500"), // 500 HLUSD/month
       6, // 6 months
@@ -42,8 +47,7 @@ describe("Bonus System", function () {
       const bonusAmount = ethers.parseEther("1000");
 
       await expect(
-        salaryStream.connect(employer).scheduleBonus(
-          employee.address,
+        salaryStream.connect(employer).scheduleBonus(employee.address,
           bonusAmount,
           unlockTime
         )
@@ -55,8 +59,7 @@ describe("Bonus System", function () {
       const bonusAmount = ethers.parseEther("1000");
 
       await expect(
-        salaryStream.connect(employer).scheduleBonus(
-          employee.address,
+        salaryStream.connect(employer).scheduleBonus(employee.address,
           bonusAmount,
           unlockTime
         )
@@ -69,8 +72,7 @@ describe("Bonus System", function () {
       const unlockTime = (await time.latest()) + 86400;
       const bonusAmount = ethers.parseEther("1000");
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         bonusAmount,
         unlockTime
       );
@@ -87,8 +89,7 @@ describe("Bonus System", function () {
       const unlockTime = (await time.latest()) + 86400;
 
       await expect(
-        salaryStream.connect(employer).scheduleBonus(
-          nonEmployee.address,
+        salaryStream.connect(employer).scheduleBonus(nonEmployee.address,
           ethers.parseEther("1000"),
           unlockTime
         )
@@ -99,8 +100,7 @@ describe("Bonus System", function () {
       const pastTime = (await time.latest()) - 3600; // 1 hour ago
 
       await expect(
-        salaryStream.connect(employer).scheduleBonus(
-          employee.address,
+        salaryStream.connect(employer).scheduleBonus(employee.address,
           ethers.parseEther("1000"),
           pastTime
         )
@@ -111,12 +111,11 @@ describe("Bonus System", function () {
       const unlockTime = (await time.latest()) + 86400;
 
       await expect(
-        salaryStream.connect(employee).scheduleBonus(
-          employee.address,
+        salaryStream.connect(employee).scheduleBonus(employee.address,
           ethers.parseEther("1000"),
           unlockTime
         )
-      ).to.be.revertedWith("Not admin");
+      ).to.be.revertedWith("Not HR or CEO");
     });
 
     it("Should revert if insufficient treasury balance", async function () {
@@ -127,8 +126,7 @@ describe("Bonus System", function () {
       const excessive = ethers.parseEther("3000"); // More than 2000 available
 
       await expect(
-        salaryStream.connect(employer).scheduleBonus(
-          employee.address,
+        salaryStream.connect(employer).scheduleBonus(employee.address,
           excessive,
           unlockTime
         )
@@ -141,8 +139,7 @@ describe("Bonus System", function () {
 
       const beforeScheduled = await salaryStream.totalBonusesScheduled();
       
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         bonusAmount,
         unlockTime
       );
@@ -157,8 +154,7 @@ describe("Bonus System", function () {
 
       const reservedBefore = await treasury.employerReserved(employer.address);
       
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         bonusAmount,
         unlockTime
       );
@@ -171,14 +167,12 @@ describe("Bonus System", function () {
       const bonus1Time = (await time.latest()) + 86400;
       const bonus2Time = (await time.latest()) + 172800; // 2 days
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("500"),
         bonus1Time
       );
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("500"),
         bonus2Time
       );
@@ -196,8 +190,7 @@ describe("Bonus System", function () {
       this.unlockTime = (await time.latest()) + 86400;
       this.bonusAmount = ethers.parseEther("1000");
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         this.bonusAmount,
         this.unlockTime
       );
@@ -283,8 +276,7 @@ describe("Bonus System", function () {
       const unlockTime = (await time.latest()) + 86400;
       const bonusAmount = ethers.parseEther("1000");
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         bonusAmount,
         unlockTime
       );
@@ -318,8 +310,7 @@ describe("Bonus System", function () {
       const unlockTime = (await time.latest()) + 100;
       const bonusAmount = ethers.parseEther("1000");
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         bonusAmount,
         unlockTime
       );
@@ -354,20 +345,17 @@ describe("Bonus System", function () {
       const bonus2Time = now + 172800; // 2 days
       const bonus3Time = now + 259200; // 3 days
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("200"),
         bonus1Time
       );
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("300"),
         bonus2Time
       );
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("400"),
         bonus3Time
       );
@@ -396,20 +384,17 @@ describe("Bonus System", function () {
       const unlockTime = now + 86400;
 
       // Schedule 3 bonuses with same unlock time
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("500"),
         unlockTime
       );
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("800"),
         unlockTime
       );
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("700"),
         unlockTime
       );
@@ -437,14 +422,12 @@ describe("Bonus System", function () {
       const bonus1 = ethers.parseEther("500");
       const bonus2 = ethers.parseEther("800");
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         bonus1,
         unlockTime
       );
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         bonus2,
         unlockTime
       );
@@ -469,6 +452,7 @@ describe("Bonus System", function () {
 
       // Create stream for second employee (smaller, shorter duration)
       await salaryStream.connect(employer).createStream(
+        1, // companyId
         employee2.address,
         ethers.parseEther("2000"), // 2000/month
         6, // 6 months = 12000 total reserved
@@ -478,14 +462,12 @@ describe("Bonus System", function () {
       const unlockTime = (await time.latest()) + 86400;
 
       // Schedule bonuses for both (small amounts)
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("500"),
         unlockTime
       );
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee2.address,
+      await salaryStream.connect(employer).scheduleBonus(employee2.address,
         ethers.parseEther("700"),
         unlockTime
       );
@@ -503,8 +485,7 @@ describe("Bonus System", function () {
   describe("Bonuses with Stream Lifecycle", function () {
     it("Should block bonus claims when stream is paused", async function () {
       const unlockTime = (await time.latest()) + 86400;
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("1000"),
         unlockTime
       );
@@ -531,8 +512,7 @@ describe("Bonus System", function () {
       // Schedule bonus with far future unlock
       const unlockTime = (await time.latest()) + 365 * 86400; // 1 year
 
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("500"),
         unlockTime
       );
@@ -559,8 +539,7 @@ describe("Bonus System", function () {
 
       const statsBefore = await salaryStream.getGlobalStats();
       
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         bonusAmount,
         unlockTime
       );
@@ -586,8 +565,7 @@ describe("Bonus System", function () {
 
       // Schedule 10 bonuses
       for (let i = 0; i < 10; i++) {
-        await salaryStream.connect(employer).scheduleBonus(
-          employee.address,
+        await salaryStream.connect(employer).scheduleBonus(employee.address,
           ethers.parseEther("100"),
           now + 86400 + i
         );
@@ -610,8 +588,7 @@ describe("Bonus System", function () {
 
       // Contract validates amount > 0
       await expect(
-        salaryStream.connect(employer).scheduleBonus(
-          employee.address,
+        salaryStream.connect(employer).scheduleBonus(employee.address,
           0,
           unlockTime
         )
@@ -622,8 +599,7 @@ describe("Bonus System", function () {
       const farFuture = (await time.latest()) + 100 * 365 * 86400; // 100 years
 
       await expect(
-        salaryStream.connect(employer).scheduleBonus(
-          employee.address,
+        salaryStream.connect(employer).scheduleBonus(employee.address,
           ethers.parseEther("1000"),
           farFuture
         )
@@ -635,8 +611,7 @@ describe("Bonus System", function () {
 
     it("Should handle bonus exactly at unlock time", async function () {
       const unlockTime = (await time.latest()) + 86400;
-      await salaryStream.connect(employer).scheduleBonus(
-        employee.address,
+      await salaryStream.connect(employer).scheduleBonus(employee.address,
         ethers.parseEther("1000"),
         unlockTime
       );
@@ -649,3 +624,6 @@ describe("Bonus System", function () {
     });
   });
 });
+
+
+

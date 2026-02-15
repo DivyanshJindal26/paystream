@@ -18,11 +18,11 @@ contract Treasury {
     /// @notice Owner address for initial setup
     address public owner;
 
-    /// @notice Total native HLUSD deposited by each employer
-    mapping(address => uint256) public employerBalances;
+    /// @notice Total native HLUSD deposited per company (employer => companyId => balance)
+    mapping(address => mapping(uint256 => uint256)) public companyBalances;
 
-    /// @notice Native HLUSD reserved for active salary streams per employer
-    mapping(address => uint256) public employerReserved;
+    /// @notice Native HLUSD reserved for active salary streams per company
+    mapping(address => mapping(uint256 => uint256)) public companyReserved;
 
     // ========== YIELD STATE ==========
 
@@ -32,22 +32,22 @@ contract Treasury {
     /// @notice Seconds in one year for yield calculation
     uint256 public constant SECONDS_PER_YEAR = 365 days;
 
-    /// @notice Timestamp of last yield claim per employer
-    mapping(address => uint256) public lastYieldClaim;
+    /// @notice Timestamp of last yield claim per company
+    mapping(address => mapping(uint256 => uint256)) public lastYieldClaim;
 
-    /// @notice Total yield claimed per employer (lifetime)
-    mapping(address => uint256) public totalYieldClaimed;
+    /// @notice Total yield claimed per company (lifetime)
+    mapping(address => mapping(uint256 => uint256)) public totalYieldClaimed;
 
     /// @notice Global total yield paid out
     uint256 public totalYieldPaidGlobal;
 
     // ========== EVENTS ==========
 
-    event Deposited(address indexed employer, uint256 amount);
-    event Reserved(address indexed employer, uint256 amount);
-    event SalaryReleased(address indexed employer, address indexed recipient, uint256 amount);
+    event Deposited(address indexed employer, uint256 indexed companyId, uint256 amount);
+    event Reserved(address indexed employer, uint256 indexed companyId, uint256 amount);
+    event SalaryReleased(address indexed employer, uint256 indexed companyId, address recipient, uint256 amount);
     event SalaryStreamSet(address indexed salaryStream);
-    event YieldClaimed(address indexed employer, uint256 amount, uint256 reserved, uint256 elapsed);
+    event YieldClaimed(address indexed employer, uint256 indexed companyId, uint256 amount, uint256 reserved, uint256 elapsed);
 
     // ========== CONSTRUCTOR ==========
 
@@ -83,36 +83,39 @@ contract Treasury {
     // ========== EMPLOYER FUNCTIONS ==========
 
     /**
-     * @notice Deposit native HLUSD to treasury for funding salary streams
+     * @notice Deposit native HLUSD to treasury for a specific company
      * @dev Payable function - send HLUSD with transaction
+     * @param companyId ID of the company to deposit for
      */
-    function deposit() external payable {
+    function deposit(uint256 companyId) external payable {
         require(msg.value > 0, "Amount must be greater than 0");
+        require(companyId > 0, "Invalid company ID");
         
         // Initialize yield tracking on first deposit
-        if (lastYieldClaim[msg.sender] == 0) {
-            lastYieldClaim[msg.sender] = block.timestamp;
+        if (lastYieldClaim[msg.sender][companyId] == 0) {
+            lastYieldClaim[msg.sender][companyId] = block.timestamp;
         }
 
         // Update balance (CEI pattern - Effects before Interactions)
-        employerBalances[msg.sender] += msg.value;
+        companyBalances[msg.sender][companyId] += msg.value;
 
-        emit Deposited(msg.sender, msg.value);
+        emit Deposited(msg.sender, companyId, msg.value);
     }
 
     // ========== YIELD FUNCTIONS ==========
 
     /**
-     * @notice Calculate accrued yield for an employer
+     * @notice Calculate accrued yield for a company
      * @dev yield = reserved * annualYieldPercent * elapsed / (100 * SECONDS_PER_YEAR)
      * @param employer Address of the employer
+     * @param companyId ID of the company
      * @return Accrued yield in native HLUSD
      */
-    function _calculateYield(address employer) internal view returns (uint256) {
-        uint256 reserved = employerReserved[employer];
+    function _calculateYield(address employer, uint256 companyId) internal view returns (uint256) {
+        uint256 reserved = companyReserved[employer][companyId];
         if (reserved == 0) return 0;
         
-        uint256 lastClaim = lastYieldClaim[employer];
+        uint256 lastClaim = lastYieldClaim[employer][companyId];
         if (lastClaim == 0) return 0;
         
         uint256 elapsed = block.timestamp - lastClaim;
@@ -123,44 +126,49 @@ contract Treasury {
     }
 
     /**
-     * @notice Claim accrued yield on reserved payroll capital
+     * @notice Claim accrued yield on reserved payroll capital for a company
      * @dev Follows CEI pattern. Yield is minted from treasury surplus.
+     * @param companyId ID of the company
      */
-    function claimYield() external {
-        uint256 yieldAmount = _calculateYield(msg.sender);
+    function claimYield(uint256 companyId) external {
+        uint256 yieldAmount = _calculateYield(msg.sender, companyId);
         require(yieldAmount > 0, "No yield accrued");
         require(address(this).balance >= yieldAmount, "Insufficient treasury balance");
 
+        uint256 prevClaim = lastYieldClaim[msg.sender][companyId];
+        
         // Effects: update state before transfer
-        lastYieldClaim[msg.sender] = block.timestamp;
-        totalYieldClaimed[msg.sender] += yieldAmount;
+        lastYieldClaim[msg.sender][companyId] = block.timestamp;
+        totalYieldClaimed[msg.sender][companyId] += yieldAmount;
         totalYieldPaidGlobal += yieldAmount;
 
         // Interaction: transfer yield to employer
         payable(msg.sender).transfer(yieldAmount);
 
-        emit YieldClaimed(msg.sender, yieldAmount, employerReserved[msg.sender], block.timestamp - lastYieldClaim[msg.sender]);
+        emit YieldClaimed(msg.sender, companyId, yieldAmount, companyReserved[msg.sender][companyId], block.timestamp - prevClaim);
     }
 
     /**
-     * @notice Get current accrued (unclaimed) yield for an employer
+     * @notice Get current accrued (unclaimed) yield for a company
      * @param employer Address of the employer
+     * @param companyId ID of the company
      * @return Accrued yield amount
      */
-    function getAccruedYield(address employer) external view returns (uint256) {
-        return _calculateYield(employer);
+    function getAccruedYield(address employer, uint256 companyId) external view returns (uint256) {
+        return _calculateYield(employer, companyId);
     }
 
     /**
-     * @notice Get complete yield statistics for an employer
+     * @notice Get complete yield statistics for a company
      * @param employer Address of the employer
+     * @param companyId ID of the company
      * @return reserved Current reserved capital
      * @return accruedYield Current unclaimed yield
      * @return _totalYieldClaimed Lifetime yield claimed
      * @return _annualYieldPercent Annual yield rate
      * @return _lastClaimTimestamp Last claim timestamp
      */
-    function getYieldStats(address employer)
+    function getYieldStats(address employer, uint256 companyId)
         external
         view
         returns (
@@ -172,11 +180,11 @@ contract Treasury {
         )
     {
         return (
-            employerReserved[employer],
-            _calculateYield(employer),
-            totalYieldClaimed[employer],
+            companyReserved[employer][companyId],
+            _calculateYield(employer, companyId),
+            totalYieldClaimed[employer][companyId],
             annualYieldPercent,
-            lastYieldClaim[employer]
+            lastYieldClaim[employer][companyId]
         );
     }
 
@@ -186,22 +194,23 @@ contract Treasury {
      * @notice Reserve native HLUSD for a new salary stream
      * @dev Only callable by authorized SalaryStream contract
      * @param employer Address of the employer
+     * @param companyId ID of the company
      * @param amount Total amount to reserve for stream
      */
-    function reserveFunds(address employer, uint256 amount) external onlySalaryStream {
+    function reserveFunds(address employer, uint256 companyId, uint256 amount) external onlySalaryStream {
         // Check available balance (deposited minus already reserved)
-        uint256 available = employerBalances[employer] - employerReserved[employer];
+        uint256 available = companyBalances[employer][companyId] - companyReserved[employer][companyId];
         require(available >= amount, "Insufficient balance");
 
         // Initialize yield tracking if not set
-        if (lastYieldClaim[employer] == 0) {
-            lastYieldClaim[employer] = block.timestamp;
+        if (lastYieldClaim[employer][companyId] == 0) {
+            lastYieldClaim[employer][companyId] = block.timestamp;
         }
 
         // Reserve the funds
-        employerReserved[employer] += amount;
+        companyReserved[employer][companyId] += amount;
 
-        emit Reserved(employer, amount);
+        emit Reserved(employer, companyId, amount);
     }
 
     /**
@@ -209,37 +218,40 @@ contract Treasury {
      * @dev Only callable by authorized SalaryStream contract
      * @dev Implements Checks-Effects-Interactions pattern for security
      * @param employer Address of the employer
+     * @param companyId ID of the company
      * @param to Address receiving the payment (employee or tax vault)
      * @param amount Amount to release in native HLUSD
      */
     function releaseSalary(
         address employer,
+        uint256 companyId,
         address to,
         uint256 amount
     ) external onlySalaryStream {
         require(amount > 0, "Amount must be greater than 0");
         require(to != address(0), "Invalid recipient");
-        require(employerReserved[employer] >= amount, "Insufficient reserved");
+        require(companyReserved[employer][companyId] >= amount, "Insufficient reserved");
 
         // Effects: Update state before external calls
-        employerReserved[employer] -= amount;
-        employerBalances[employer] -= amount;
+        companyReserved[employer][companyId] -= amount;
+        companyBalances[employer][companyId] -= amount;
 
         // Interaction: Transfer native HLUSD
         payable(to).transfer(amount);
 
-        emit SalaryReleased(employer, to, amount);
+        emit SalaryReleased(employer, companyId, to, amount);
     }
 
     // ========== VIEW FUNCTIONS ==========
 
     /**
-     * @notice Get available (unreserved) balance for an employer
+     * @notice Get available (unreserved) balance for a company
      * @param employer Address of the employer
+     * @param companyId ID of the company
      * @return Available HLUSD balance
      */
-    function getAvailableBalance(address employer) external view returns (uint256) {
-        return employerBalances[employer] - employerReserved[employer];
+    function getAvailableBalance(address employer, uint256 companyId) external view returns (uint256) {
+        return companyBalances[employer][companyId] - companyReserved[employer][companyId];
     }
 
     /**
@@ -253,16 +265,10 @@ contract Treasury {
     // ========== EMERGENCY ==========
 
     /**
-     * @notice Fallback to accept native HLUSD deposits
-     * @dev Automatically credits sender's balance
+     * @notice Fallback - disabled for company-aware deposits
+     * @dev Use deposit(companyId) function instead
      */
     receive() external payable {
-        if (msg.value > 0) {
-            if (lastYieldClaim[msg.sender] == 0) {
-                lastYieldClaim[msg.sender] = block.timestamp;
-            }
-            employerBalances[msg.sender] += msg.value;
-            emit Deposited(msg.sender, msg.value);
-        }
+        revert("Use deposit(companyId) function");
     }
 }

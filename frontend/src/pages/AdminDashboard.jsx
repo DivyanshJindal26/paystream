@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useWallet } from '../context/WalletContext';
-import DepositPanel from '../components/DepositPanel';
+import { useDecimal } from '../context/DecimalContext';
+// import DepositPanel from '../components/DepositPanel'; // DEPRECATED: Use CompanyPanel for deposits (requires companyId)
 import CreateStreamForm from '../components/CreateStreamForm';
 import normalizeBigInts from '../utils/normalizeBigInts';
 
 export default function AdminDashboard() {
   const { account, contracts, isCorrectNetwork } = useWallet();
+  const { formatValue } = useDecimal();
   const [balances, setBalances] = useState({
     total: '0',
     reserved: '0',
@@ -144,7 +146,7 @@ export default function AdminDashboard() {
     return (
       <div className="page">
         <div className="empty-state">
-          <div className="empty-state-icon">🔌</div>
+          <div className="empty-state-icon">--</div>
           <div className="empty-state-title">Connect Your Wallet</div>
           <div className="empty-state-text">
             Connect MetaMask to access the Admin Console
@@ -163,9 +165,9 @@ export default function AdminDashboard() {
         {toasts.map((t) => (
           <div key={t.id} className={`toast toast-${t.type}`}>
             <span>
-              {t.type === 'success' && '✅ '}
-              {t.type === 'error' && '❌ '}
-              {t.type === 'info' && 'ℹ️ '}
+              {t.type === 'success' && ''}
+              {t.type === 'error' && ''}
+              {t.type === 'info' && ''}
               {t.message}
             </span>
             {t.txHash && (
@@ -185,7 +187,7 @@ export default function AdminDashboard() {
       <div className="dashboard-header">
         <div>
           <h1 className="dashboard-title">
-            🏢 HR Management Console
+            HR Management Console
           </h1>
           <p className="dashboard-subtitle">
             Complete on-chain payroll control system - manage treasury, create streams, monitor employees
@@ -193,11 +195,42 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Multi-Company Notice */}
+      <div className="dashboard-full">
+        <div className="glass-card" style={{ 
+          background: 'var(--accent-dim)', 
+          border: '1px solid var(--border)',
+          marginBottom: '1.5rem'
+        }}>
+          <div style={{ padding: '1.25rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+              Multi-Company Features Available
+            </div>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              Yield claiming and bonus scheduling are now company-scoped.<br/>
+              Visit <strong>Company Panel</strong> to manage company-specific treasury, yield, and bonuses.
+            </p>
+            <a href="/company" style={{ 
+              display: 'inline-block',
+              padding: '0.75rem 1.5rem',
+              background: 'var(--text-primary)',
+              color: 'var(--bg-primary)',
+              borderRadius: 'var(--radius-sm)',
+              textDecoration: 'none',
+              fontWeight: 600,
+              fontSize: '0.875rem'
+            }}>
+              Go to Company Panel →
+            </a>
+          </div>
+        </div>
+      </div>
+
       {/* Treasury Stats */}
       <div className="dashboard-full">
         <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
           <div className="card-header">
-            <span className="card-title">📊 Treasury Status</span>
+            <span className="card-title">Treasury Status</span>
             <button
               className="btn btn-outline"
               style={{ width: 'auto', padding: '0.4rem 1rem', fontSize: '0.8rem' }}
@@ -210,9 +243,9 @@ export default function AdminDashboard() {
           
           {/* Account Info Banner */}
           <div style={{ 
-            background: 'rgba(99, 102, 241, 0.1)', 
-            border: '1px solid rgba(99, 102, 241, 0.3)',
-            borderRadius: '8px',
+            background: 'var(--accent-dim)', 
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
             padding: '12px 16px',
             marginBottom: '1rem',
             fontSize: '0.85rem',
@@ -220,11 +253,10 @@ export default function AdminDashboard() {
             alignItems: 'center',
             gap: '8px'
           }}>
-            <span style={{ fontSize: '1rem' }}>👤</span>
             <div>
               <strong>Viewing balance for:</strong> {account}
-              <div style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '4px' }}>
-                💡 Treasury tracks deposits per wallet address. Switch MetaMask accounts to view different balances.
+              <div style={{ fontSize: '0.75rem', opacity: 0.8, marginTop: '4px', color: 'var(--text-dim)' }}>
+                Treasury tracks deposits per wallet address. Switch MetaMask accounts to view different balances.
               </div>
             </div>
           </div>
@@ -232,27 +264,27 @@ export default function AdminDashboard() {
           <div className="treasury-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
             <div className="stat-item">
               <div className="stat-label">Your Total Deposited</div>
-              <div className="stat-value">{ethers.formatEther(balances.total)}</div>
+              <div className="stat-value">{formatValue(balances.total)}</div>
               <div className="form-hint">HLUSD</div>
             </div>
             <div className="stat-item">
               <div className="stat-label">Your Reserved</div>
               <div className="stat-value purple">
-                {ethers.formatEther(balances.reserved)}
+                {formatValue(balances.reserved)}
               </div>
               <div className="form-hint">HLUSD</div>
             </div>
             <div className="stat-item">
               <div className="stat-label">Your Available</div>
               <div className="stat-value green">
-                {ethers.formatEther(balances.available)}
+                {formatValue(balances.available)}
               </div>
               <div className="form-hint">HLUSD</div>
             </div>
             <div className="stat-item">
               <div className="stat-label">Total Treasury Balance</div>
               <div className="stat-value" style={{ color: 'var(--cyan)' }}>
-                {ethers.formatEther(balances.treasuryTotal)}
+                {formatValue(balances.treasuryTotal)}
               </div>
               <div className="form-hint">All employers</div>
             </div>
@@ -263,13 +295,13 @@ export default function AdminDashboard() {
         {employerStats && (
           <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
             <div className="card-header">
-              <span className="card-title">📈 Real-Time Analytics</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>⚡ On-chain indexed • Gas-free queries</span>
+              <span className="card-title">Real-Time Analytics</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>On-chain indexed</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem' }}>
               {/* Your Stats */}
               <div>
-                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--cyan)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                   Your Payroll
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
@@ -283,12 +315,12 @@ export default function AdminDashboard() {
                   </div>
                   <div className="stat-item">
                     <div className="stat-label">Your Reserved</div>
-                    <div className="stat-value purple">{parseFloat(ethers.formatEther(employerStats.totalReserved)).toFixed(2)}</div>
+                    <div className="stat-value purple">{formatValue(employerStats.totalReserved)}</div>
                     <div className="form-hint">HLUSD</div>
                   </div>
                   <div className="stat-item">
                     <div className="stat-label">Your Paid</div>
-                    <div className="stat-value green">{parseFloat(ethers.formatEther(employerStats.totalPaid)).toFixed(2)}</div>
+                    <div className="stat-value green">{formatValue(employerStats.totalPaid)}</div>
                     <div className="form-hint">HLUSD</div>
                   </div>
                 </div>
@@ -297,7 +329,7 @@ export default function AdminDashboard() {
               {/* Global Stats */}
               {globalStats && (
                 <div>
-                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--purple)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Global Platform
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
@@ -311,12 +343,12 @@ export default function AdminDashboard() {
                     </div>
                     <div className="stat-item">
                       <div className="stat-label">Global Reserved</div>
-                      <div className="stat-value purple">{parseFloat(ethers.formatEther(globalStats.totalReserved)).toFixed(2)}</div>
+                      <div className="stat-value purple">{formatValue(globalStats.totalReserved)}</div>
                       <div className="form-hint">HLUSD</div>
                     </div>
                     <div className="stat-item">
                       <div className="stat-label">Global Paid</div>
-                      <div className="stat-value green">{parseFloat(ethers.formatEther(globalStats.totalPaid)).toFixed(2)}</div>
+                      <div className="stat-value green">{formatValue(globalStats.totalPaid)}</div>
                       <div className="form-hint">HLUSD</div>
                     </div>
                   </div>
@@ -327,19 +359,21 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Yield Engine + Bonus Scheduler */}
+      {/* Yield Engine + Bonus Scheduler - DEPRECATED: Now company-scoped in CompanyPanel */}
+      {/* 
       <div className="dashboard-grid">
         <YieldEnginePanel />
         <BonusSchedulerPanel employeeList={employeeList} />
       </div>
+      */}
 
       {/* Global Analytics Cards */}
       {globalStats && (
         <div className="dashboard-full">
           <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
             <div className="card-header">
-              <span className="card-title">📊 Platform Analytics Overview</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>⚡ 100% on-chain data</span>
+              <span className="card-title">Platform Analytics Overview</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>100% on-chain data</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
               <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0s' }}>
@@ -352,29 +386,29 @@ export default function AdminDashboard() {
               </div>
               <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.1s' }}>
                 <div className="stat-label">Total Reserved</div>
-                <div className="stat-value purple">{parseFloat(ethers.formatEther(globalStats.totalReserved)).toFixed(2)}</div>
+                <div className="stat-value purple">{formatValue(globalStats.totalReserved)}</div>
                 <div className="form-hint">HLUSD</div>
               </div>
               <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.15s' }}>
                 <div className="stat-label">Total Paid</div>
-                <div className="stat-value green">{parseFloat(ethers.formatEther(globalStats.totalPaid)).toFixed(2)}</div>
+                <div className="stat-value green">{formatValue(globalStats.totalPaid)}</div>
                 <div className="form-hint">HLUSD</div>
               </div>
-              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.2s', borderColor: 'rgba(255,215,0,0.2)' }}>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.2s' }}>
                 <div className="stat-label">Yield Generated</div>
-                <div className="stat-value" style={{ color: '#ffd700' }}>
-                  {(() => { try { return parseFloat(ethers.formatEther(globalStats.totalPaid || '0')).toFixed(2); } catch { return '0.00'; }})()}
+                <div className="stat-value">
+                  {(() => { try { return formatValue(globalStats.totalPaid || '0'); } catch { return '0'; }})()}
                 </div>
                 <div className="form-hint">HLUSD</div>
               </div>
-              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.25s', borderColor: 'rgba(255,136,0,0.2)' }}>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.25s' }}>
                 <div className="stat-label">Bonuses Scheduled</div>
-                <div className="stat-value" style={{ color: '#ff8800' }}>{parseFloat(ethers.formatEther(globalStats.totalBonusesScheduled || '0')).toFixed(2)}</div>
+                <div className="stat-value">{formatValue(globalStats.totalBonusesScheduled || '0')}</div>
                 <div className="form-hint">HLUSD</div>
               </div>
-              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.3s', borderColor: 'rgba(0,255,136,0.2)' }}>
+              <div className="stat-item analytics-card-anim" style={{ '--anim-delay': '0.3s' }}>
                 <div className="stat-label">Bonuses Paid</div>
-                <div className="stat-value green">{parseFloat(ethers.formatEther(globalStats.totalBonusesPaid || '0')).toFixed(2)}</div>
+                <div className="stat-value green">{formatValue(globalStats.totalBonusesPaid || '0')}</div>
                 <div className="form-hint">HLUSD</div>
               </div>
             </div>
@@ -389,7 +423,7 @@ export default function AdminDashboard() {
 
       {/* Deposit + Create Stream */}
       <div className="dashboard-grid">
-        <DepositPanel onSuccess={handleTxResult} />
+        {/* DepositPanel removed - deposits now require companyId. Use CompanyPanel instead. */}
         <CreateStreamForm 
           onSuccess={(msg, type, txHash, employeeAddr, streamData) => {
             handleTxResult(msg, type, txHash);
@@ -530,14 +564,14 @@ function EmployeeManager({ employeeList, onAddEmployee, onRemoveEmployee, onStre
   return (
     <div className="glass-card">
       <div className="card-header" style={{ marginBottom: '1.5rem' }}>
-        <span className="card-title">👥 Employee Management ({stats.total})</span>
+        <span className="card-title">Employee Management ({stats.total})</span>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <button
             className="btn btn-outline"
             onClick={() => setViewMode(viewMode === 'grid' ? 'table' : 'grid')}
             style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}
           >
-            {viewMode === 'grid' ? '📋 Table' : '🎛️ Grid'}
+            {viewMode === 'grid' ? 'Table' : 'Grid'}
           </button>
           <button
             className="btn btn-outline"
@@ -587,21 +621,21 @@ function EmployeeManager({ employeeList, onAddEmployee, onRemoveEmployee, onStre
             disabled={!newAddress || !ethers.isAddress(newAddress)}
             style={{ width: 'auto', padding: '0.75rem 1.5rem', minWidth: '100px' }}
           >
-            ➕ Add
+            + Add
           </button>
           <button
             className="btn btn-outline"
             onClick={handleBulkAdd}
             style={{ width: 'auto', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
           >
-            📋 Bulk
+            Bulk
           </button>
           <button
             className="btn btn-outline"
             onClick={handleImport}
             style={{ width: 'auto', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
           >
-            📥 Import
+            Import
           </button>
           <button
             className="btn btn-outline"
@@ -609,7 +643,7 @@ function EmployeeManager({ employeeList, onAddEmployee, onRemoveEmployee, onStre
             disabled={employeeList.length === 0}
             style={{ width: 'auto', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
           >
-            📤 Export
+            Export
           </button>
         </div>
       </div>
@@ -617,7 +651,7 @@ function EmployeeManager({ employeeList, onAddEmployee, onRemoveEmployee, onStre
       {/* Employee List */}
       {employeeList.length === 0 ? (
         <div className="empty-state" style={{ padding: '2rem 1rem' }}>
-          <div className="empty-state-icon">👤</div>
+          <div className="empty-state-icon">--</div>
           <div className="empty-state-text">No employees added yet. Add addresses above to manage streams.</div>
         </div>
       ) : viewMode === 'grid' ? (
@@ -761,7 +795,7 @@ function EmployeeCard({ address, streamData, loading, onRemove, onRefresh, onEdi
               <div className="stream-detail-label">Monthly</div>
               <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                 {console.log(stream)}
-                {parseFloat(ethers.formatEther(BigInt(stream[2]) * 2592000n)).toFixed(2)}
+                {formatValue(BigInt(stream[2]) * 2592000n)}
               </div>
             </div>
             <div>
@@ -773,7 +807,7 @@ function EmployeeCard({ address, streamData, loading, onRemove, onRefresh, onEdi
             <div>
               <div className="stream-detail-label">Withdrawable</div>
               <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--green)' }}>
-                {parseFloat(ethers.formatEther(streamData.withdrawable || '0')).toFixed(4)}
+                {formatValue(streamData.withdrawable || '0')}
               </div>
             </div>
             <div>
@@ -791,7 +825,7 @@ function EmployeeCard({ address, streamData, loading, onRemove, onRefresh, onEdi
               disabled={actionLoading}
               style={{ padding: '0.5rem', fontSize: '0.75rem' }}
             >
-              {stream[8] ? '▶️' : '⏸️'}
+              {stream[8] ? 'Resume' : 'Pause'}
             </button>
             <button
               className="btn btn-outline"
@@ -799,7 +833,7 @@ function EmployeeCard({ address, streamData, loading, onRemove, onRefresh, onEdi
               disabled={actionLoading}
               style={{ padding: '0.5rem', fontSize: '0.75rem', color: 'var(--red)', borderColor: 'var(--red)' }}
             >
-              🗑️
+              Cancel
             </button>
           </div>
         </>
@@ -880,13 +914,13 @@ function EmployeeTable({ employees, streams, loading, onRemove, onRefresh, onStr
                   )}
                 </td>
                 <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>
-                  {hasStream ? parseFloat(ethers.formatEther(BigInt(stream[2]) * 2592000n)).toFixed(2) : '—'}
+                  {hasStream ? formatValue(BigInt(stream[2]) * 2592000n) : '—'}
                 </td>
                 <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600 }}>
                   {hasStream ? `${stream[7].toString()}%` : '—'}
                 </td>
                 <td style={{ padding: '0.75rem', textAlign: 'right', fontWeight: 600, color: 'var(--green)' }}>
-                  {hasStream ? parseFloat(ethers.formatEther(streamData.withdrawable || '0')).toFixed(4) : '—'}
+                  {hasStream ? formatValue(streamData.withdrawable || '0') : '—'}
                 </td>
                 <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                   <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
@@ -905,7 +939,7 @@ function EmployeeTable({ employees, streams, loading, onRemove, onRefresh, onStr
                             cursor: 'pointer',
                           }}
                         >
-                          {stream[9] ? '▶️' : '⏸️'}
+                          {stream[9] ? 'Resume' : 'Pause'}
                         </button>
                         <button
                           onClick={() => handleAction(addr, 'cancel')}
@@ -920,7 +954,7 @@ function EmployeeTable({ employees, streams, loading, onRemove, onRefresh, onStr
                             cursor: 'pointer',
                           }}
                         >
-                          🗑️
+                          Cancel
                         </button>
                       </>
                     )}
@@ -959,7 +993,7 @@ function EditStreamModal({ address, streamData, onClose, onSuccess }) {
     <div className="network-warning-overlay" onClick={onClose}>
       <div className="glass-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, padding: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>✏️ Modify Stream</h3>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Modify Stream</h3>
           <button
             onClick={onClose}
             style={{
@@ -974,9 +1008,9 @@ function EditStreamModal({ address, streamData, onClose, onSuccess }) {
           </button>
         </div>
 
-        <div style={{ marginBottom: '1.5rem', padding: '1rem', borderRadius: '8px', background: 'var(--cyan-dim)', border: '1px solid rgba(0,245,255,0.2)' }}>
-          <div style={{ fontSize: '0.85rem', color: 'var(--cyan)', marginBottom: '0.5rem', fontWeight: 600 }}>
-            ℹ️ How to Modify
+        <div style={{ marginBottom: '1.5rem', padding: '1rem', borderRadius: '8px', background: 'var(--accent-dim)', border: '1px solid var(--border)' }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
+            How to Modify
           </div>
           <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             The contract doesn't support direct stream modification. To change parameters:
@@ -993,7 +1027,7 @@ function EditStreamModal({ address, streamData, onClose, onSuccess }) {
               Current Configuration
             </div>
             <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.85rem' }}>
-              <div>Monthly Salary: <strong>{ethers.formatEther(BigInt(stream[2]) * 2592000n)} HLUSD</strong></div>
+              <div>Monthly Salary: <strong>{formatValue(BigInt(stream[2]) * 2592000n)} HLUSD</strong></div>
               <div>Tax: <strong>{stream[7]}%</strong></div>
               <div>Status: <strong>{stream[9] ? 'Paused' : 'Active'}</strong></div>
             </div>
@@ -1139,11 +1173,10 @@ function YieldEnginePanel() {
 
       const yieldAmount = (reservedBigInt * annualRate * elapsed) / divisor;
 
-      // Format for display (12 decimal places for precision)
-      const yieldFormatted = ethers.formatEther(yieldAmount);
-      const yieldValue = parseFloat(yieldFormatted);
+      // Format for display (full precision)
+      const yieldFormatted = formatValue(yieldAmount);
 
-      setDisplayYield(yieldValue.toFixed(12));
+      setDisplayYield(yieldFormatted);
     };
 
     // Run simulation immediately
@@ -1181,8 +1214,8 @@ function YieldEnginePanel() {
   return (
     <div className="glass-card yield-panel">
       <div className="card-header">
-        <span className="card-title">🏦 Payroll Capital Yield Engine</span>
-        <span className="yield-badge">⚡ {yieldData.annualRate}% APY</span>
+        <span className="card-title">Payroll Capital Yield Engine</span>
+        <span className="yield-badge">{yieldData.annualRate}% APY</span>
       </div>
 
       <div className="yield-display">
@@ -1199,17 +1232,17 @@ function YieldEnginePanel() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', margin: '1rem 0' }}>
-        <div className="stat-item" style={{ borderColor: 'rgba(255,215,0,0.15)' }}>
+        <div className="stat-item" style={{ borderColor: 'var(--border)' }}>
           <div className="stat-label">Reserved Capital</div>
-          <div className="stat-value" style={{ color: '#ffd700', fontSize: '1.1rem' }}>
-            {initialized ? parseFloat(ethers.formatEther(yieldData.reserved)).toFixed(4) : '0.0000'}
+          <div className="stat-value" style={{ fontSize: '1.1rem' }}>
+            {initialized ? formatValue(yieldData.reserved) : '0'}
           </div>
           <div className="form-hint">HLUSD</div>
         </div>
-        <div className="stat-item" style={{ borderColor: 'rgba(0,255,136,0.15)' }}>
+        <div className="stat-item" style={{ borderColor: 'var(--border)' }}>
           <div className="stat-label">Total Yield Claimed</div>
           <div className="stat-value green" style={{ fontSize: '1.1rem' }}>
-            {initialized ? parseFloat(ethers.formatEther(yieldData.totalClaimed)).toFixed(6) : '0.000000'}
+            {initialized ? formatValue(yieldData.totalClaimed) : '0'}
           </div>
           <div className="form-hint">HLUSD</div>
         </div>
@@ -1220,7 +1253,7 @@ function YieldEnginePanel() {
         onClick={handleClaimYield}
         disabled={claiming || displayYield === '0.000000000000'}
       >
-        {claiming ? <span className="spinner" /> : claimSuccess ? '✅ Yield Claimed!' : '💰 Claim Yield'}
+        {claiming ? <span className="spinner" /> : claimSuccess ? 'Yield Claimed!' : 'Claim Yield'}
       </button>
 
       {/* Last Claim Info */}
@@ -1296,7 +1329,7 @@ function BonusSchedulerPanel({ employeeList }) {
   return (
     <div className="glass-card bonus-panel">
       <div className="card-header">
-        <span className="card-title">🎁 Bonus Scheduler</span>
+        <span className="card-title">Bonus Scheduler</span>
         <button className="btn btn-outline" onClick={fetchBonuses} disabled={loadingBonuses} style={{ width: 'auto', padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}>
           {loadingBonuses ? <span className="spinner" /> : '↻'}
         </button>
@@ -1356,13 +1389,13 @@ function BonusSchedulerPanel({ employeeList }) {
         disabled={scheduling || !bonusAddr || !bonusAmount || !bonusDate}
         style={{ marginBottom: '1.25rem' }}
       >
-        {scheduling ? <span className="spinner" /> : '🎁 Schedule Bonus'}
+        {scheduling ? <span className="spinner" /> : 'Schedule Bonus'}
       </button>
 
       {/* Bonus List */}
       {Object.keys(allBonuses).length > 0 && (
         <div>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--purple)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-dim)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Scheduled Bonuses
           </div>
           <div style={{ maxHeight: 200, overflowY: 'auto' }}>
@@ -1374,12 +1407,12 @@ function BonusSchedulerPanel({ employeeList }) {
                       {addr.slice(0, 6)}...{addr.slice(-4)}
                     </span>
                     <span className={`card-badge ${b.claimed ? 'badge-paused' : Date.now() / 1000 > b.unlockTime ? 'badge-active' : ''}`}
-                      style={!b.claimed && Date.now() / 1000 <= b.unlockTime ? { background: 'var(--purple-dim)', color: 'var(--purple)', border: '1px solid rgba(124,58,237,0.3)' } : {}}>
+                      style={!b.claimed && Date.now() / 1000 <= b.unlockTime ? { background: 'var(--accent-dim)', color: 'var(--text-dim)', border: '1px solid var(--border)' } : {}}>
                       {b.claimed ? 'Claimed' : Date.now() / 1000 > b.unlockTime ? 'Ready' : 'Locked'}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', fontSize: '0.8rem' }}>
-                    <span style={{ fontWeight: 600 }}>{parseFloat(ethers.formatEther(b.amount)).toFixed(4)} HLUSD</span>
+                    <span style={{ fontWeight: 600 }}>{formatValue(b.amount)} HLUSD</span>
                     <span style={{ color: 'var(--text-dim)' }}>{formatDate(b.unlockTime)}</span>
                   </div>
                 </div>
@@ -1400,19 +1433,19 @@ function ExplanationPanels() {
   const panels = [
     {
       key: 'streaming',
-      icon: '⏱️',
+      icon: '',
       title: 'How Salary Streaming Works',
       content: 'PayStream converts monthly salaries into per-second payment rates. When an employer creates a stream, funds are reserved in the Treasury contract. The employee\'s earnings increase every second based on their ratePerSecond. No continuous transactions are needed — earnings are calculated dynamically using block.timestamp, and employees withdraw whenever they choose. Tax is automatically deducted at withdrawal.',
     },
     {
       key: 'yield',
-      icon: '🏦',
+      icon: '',
       title: 'How Yield Accrues',
       content: 'While employer funds are reserved in the Treasury for active salary streams, they earn a deterministic 5% annual yield. Yield accrues linearly per second using the formula: yield = reserved × rate% × elapsed / (100 × SECONDS_PER_YEAR). This is calculated on-chain with no oracle dependency. Employers can claim accrued yield at any time without affecting employee salary streams.',
     },
     {
       key: 'bonuses',
-      icon: '🎁',
+      icon: '',
       title: 'How Bonuses Unlock',
       content: 'Admins can schedule one-time performance bonuses for any employee with a future unlock time. Bonus funds are reserved from the employer\'s Treasury balance immediately. When the unlock time arrives, the bonus becomes claimable. During the next withdrawal, all unlocked bonuses are automatically included in the gross withdrawable amount, with tax applied uniformly. Bonuses can never be claimed twice.',
     },

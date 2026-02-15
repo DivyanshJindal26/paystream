@@ -5,7 +5,11 @@ import { connectDB } from './config/db.js';
 import employeeRoutes from './routes/employees.js';
 import streamRoutes from './routes/streams.js';
 import logsRoutes from './routes/logs.js';
+import oracleRoutes from './routes/oracle.js';
+import pricesRoutes from './routes/prices.js';
 import { requestLogger } from './middleware/logger.js';
+import { requireWallet } from './middleware/auth.js';
+import { rateLimiter } from './middleware/rateLimit.js';
 import LoggerService from './services/loggerService.js';
 
 import { setServers } from "node:dns/promises";
@@ -34,10 +38,15 @@ app.use(express.urlencoded({ extended: true }));
 // Request logging middleware
 app.use(requestLogger);
 
-// Routes
-app.use('/api/employees', employeeRoutes);
-app.use('/api/streams', streamRoutes);
+// Rate limiting
+app.use('/api/', rateLimiter);
+
+// Routes - employees & streams require wallet auth
+app.use('/api/employees', requireWallet, employeeRoutes);
+app.use('/api/streams', requireWallet, streamRoutes);
 app.use('/api/logs', logsRoutes);
+app.use('/api/oracle', rateLimiter, oracleRoutes);
+app.use('/api/prices', pricesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

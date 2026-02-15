@@ -5,18 +5,13 @@ import { ethers } from 'ethers';
  * @returns {Promise<{hlusdToInr: number, compositeRate: number}>}
  */
 export async function fetchLiveRates() {
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
   try {
-    // Fetch HLUSD → INR rate directly
-    const response = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=hela-usd&vs_currencies=inr'
-    );
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch HLUSD to INR price');
-    }
-    
+    // Fetch via backend proxy to avoid CORS / rate-limit issues
+    const response = await fetch(`${API_BASE}/api/prices`);
+    if (!response.ok) throw new Error('Backend price proxy error');
     const data = await response.json();
-    const hlusdToInr = data['hela-usd']?.inr || 83; // Fallback to ~83 INR per HLUSD
+    const hlusdToInr = data.hlusdToInr || 83;
 
     return {
       hlusdToInr,
@@ -72,18 +67,37 @@ export async function signRate(rate, timestamp, oraclePrivateKey) {
 }
 
 /**
- * Get signed rate data ready for contract call
- * @param {string} oraclePrivateKey - Oracle wallet private key
+ * Get signed rate from the backend oracle endpoint (secure — private key stays server-side).
+ * Falls back to local signing only if VITE_ORACLE_PRIVATE_KEY is set (dev mode).
+ * @param {string} [oraclePrivateKey] - DEPRECATED: only used as fallback in dev
  * @returns {Promise<{rate: bigint, timestamp: bigint, signature: string, compositeRate: number, hlusdToInr: number}>}
  */
 export async function getSignedRate(oraclePrivateKey) {
-  // Fetch live rates
+  // Always prefer the backend endpoint
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  try {
+    const res = await fetch(`${API_BASE}/api/oracle/signed-rate`);
+    if (!res.ok) throw new Error('Backend oracle unavailable');
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    return {
+      rate: BigInt(data.rate),
+      timestamp: BigInt(data.timestamp),
+      signature: data.signature,
+      compositeRate: data.compositeRate,
+      hlusdToInr: data.hlusdToInr,
+    };
+  } catch (backendErr) {
+    console.warn('Backend oracle failed, trying local fallback:', backendErr.message);
+  }
+
+  // Fallback: local signing (dev only — remove in production)
+  if (!oraclePrivateKey) {
+    throw new Error('Oracle signing unavailable. Ensure the backend is running.');
+  }
+
   const { compositeRate, hlusdToInr } = await fetchLiveRates();
-
-  // Get current timestamp
   const timestamp = Math.floor(Date.now() / 1000);
-
-  // Sign the rate
   const signedData = await signRate(compositeRate, timestamp, oraclePrivateKey);
 
   return {
@@ -135,7 +149,7 @@ export function formatConversionHistory(conversions) {
   return conversions.map((conv, index) => ({
     id: index,
     hlusdAmount: ethers.formatEther(conv.hlusdAmount),
-    inrAmount: (Number(ethers.formatEther(conv.inrAmount)) / 1e18).toFixed(2),
+    inrAmount: Number(ethers.formatEther(conv.inrAmount)).toFixed(2),
     feeAmount: ethers.formatEther(conv.feeAmount),
     rate: (Number(conv.rateUsed) / 1e18).toFixed(2),
     timestamp: new Date(Number(conv.timestamp) * 1000).toLocaleString(),

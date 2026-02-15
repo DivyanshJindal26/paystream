@@ -2,6 +2,7 @@ import express from 'express';
 import { body, param, validationResult } from 'express-validator';
 import Employee from '../models/Employee.js';
 import LoggerService from '../services/loggerService.js';
+import { requireOwnership } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ const handleValidationErrors = (req, res, next) => {
 };
 
 // Get all employees for an employer
-router.get('/:employerAddress', async (req, res) => {
+router.get('/:employerAddress', requireOwnership('employerAddress'), async (req, res) => {
   try {
     const { employerAddress } = req.params;
     const employees = await Employee.find({ 

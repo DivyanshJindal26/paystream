@@ -1,11 +1,24 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+/**
+ * Helper to build headers with wallet authentication
+ */
+function authHeaders(walletAddress) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (walletAddress) {
+    headers['X-Wallet-Address'] = walletAddress.toLowerCase();
+  }
+  return headers;
+}
+
 class APIService {
   // ========== Employee API ==========
   
   async getEmployees(employerAddress) {
     try {
-      const res = await fetch(`${API_BASE_URL}/employees/${employerAddress}`);
+      const res = await fetch(`${API_BASE_URL}/employees/${employerAddress}`, {
+        headers: authHeaders(employerAddress),
+      });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
       return data.employees;
@@ -19,7 +32,7 @@ class APIService {
     try {
       const res = await fetch(`${API_BASE_URL}/employees`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(employerAddress),
         body: JSON.stringify({
           employerAddress,
           walletAddress,
@@ -39,7 +52,7 @@ class APIService {
     try {
       const res = await fetch(`${API_BASE_URL}/employees/bulk`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(employerAddress),
         body: JSON.stringify({
           employerAddress,
           employees,
@@ -58,7 +71,7 @@ class APIService {
     try {
       const res = await fetch(
         `${API_BASE_URL}/employees/address/${employerAddress}/${walletAddress}`,
-        { method: 'DELETE' }
+        { method: 'DELETE', headers: authHeaders(employerAddress) }
       );
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
@@ -69,11 +82,11 @@ class APIService {
     }
   }
 
-  async updateEmployee(id, metadata) {
+  async updateEmployee(id, metadata, walletAddress) {
     try {
       const res = await fetch(`${API_BASE_URL}/employees/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(walletAddress),
         body: JSON.stringify(metadata),
       });
       const data = await res.json();
@@ -92,7 +105,9 @@ class APIService {
       const url = new URL(`${API_BASE_URL}/streams/${employerAddress}`);
       if (status) url.searchParams.set('status', status);
       
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: authHeaders(employerAddress),
+      });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
       return data.streams;
@@ -105,7 +120,8 @@ class APIService {
   async getStream(employerAddress, employeeAddress) {
     try {
       const res = await fetch(
-        `${API_BASE_URL}/streams/${employerAddress}/${employeeAddress}`
+        `${API_BASE_URL}/streams/${employerAddress}/${employeeAddress}`,
+        { headers: authHeaders(employerAddress) }
       );
       const data = await res.json();
       if (!data.success) {
@@ -124,7 +140,7 @@ class APIService {
     try {
       const res = await fetch(`${API_BASE_URL}/streams`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(streamData.employerAddress),
         body: JSON.stringify(streamData),
       });
       const data = await res.json();
@@ -142,7 +158,7 @@ class APIService {
         `${API_BASE_URL}/streams/${employerAddress}/${employeeAddress}/status`,
         {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(employerAddress),
           body: JSON.stringify({ paused }),
         }
       );
@@ -161,7 +177,7 @@ class APIService {
         `${API_BASE_URL}/streams/${employerAddress}/${employeeAddress}/cancel`,
         {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(employerAddress),
           body: JSON.stringify({ cancellationTxHash }),
         }
       );
@@ -180,7 +196,7 @@ class APIService {
         `${API_BASE_URL}/streams/${employerAddress}/${employeeAddress}/sync`,
         {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders(employerAddress),
           body: JSON.stringify(syncData),
         }
       );

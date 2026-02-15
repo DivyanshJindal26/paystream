@@ -1,5 +1,6 @@
 import { NavLink, Link } from 'react-router-dom';
 import { useWallet } from '../context/WalletContext';
+import { PrecisionToggle } from '../context/DecimalContext';
 import ConnectWallet from './ConnectWallet';
 
 export default function Navbar() {
@@ -10,7 +11,7 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <Link to="/" className="navbar-brand">
-        <span className="navbar-logo">⏳</span>
+        <span className="navbar-logo">PS</span>
         <span className="navbar-title">PayStream</span>
       </Link>
 
@@ -18,20 +19,27 @@ export default function Navbar() {
         <NavLink to="/" end className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
           Home
         </NavLink>
-        <NavLink to="/admin" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-          Admin Console
+        <NavLink to="/company" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
+          Company
+        </NavLink>
+        <NavLink to="/hr" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
+          HR
         </NavLink>
         <NavLink to="/employee" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-          Employee Portal
+          Employee
+        </NavLink>
+        <NavLink to="/admin" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
+          Admin
         </NavLink>
         {isAdmin && (
           <NavLink to="/logs" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-            📊 Logs
+            Logs
           </NavLink>
         )}
       </div>
 
       <div className="navbar-right">
+        <PrecisionToggle />
         <ConnectWallet />
       </div>
     </nav>
