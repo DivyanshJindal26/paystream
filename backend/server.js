@@ -4,6 +4,9 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
 import employeeRoutes from './routes/employees.js';
 import streamRoutes from './routes/streams.js';
+import logsRoutes from './routes/logs.js';
+import { requestLogger } from './middleware/logger.js';
+import LoggerService from './services/loggerService.js';
 
 import { setServers } from "node:dns/promises";
 
@@ -17,21 +20,24 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    process.env.CORS_ORIGIN || 'http://localhost:5173'
+  ],
   credentials: true,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  next();
-});
+// Request logging middleware
+app.use(requestLogger);
 
 // Routes
 app.use('/api/employees', employeeRoutes);
 app.use('/api/streams', streamRoutes);
+app.use('/api/logs', logsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -54,6 +60,18 @@ app.use((req, res) => {
 // Error handler
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
+  
+  // Log the error
+  LoggerService.logSystem({
+    level: 'error',
+    message: 'Unhandled server error',
+    error: err,
+    details: {
+      url: req.url,
+      method: req.method,
+    },
+  });
+  
   res.status(500).json({
     success: false,
     error: err.message || 'Internal server error',
@@ -65,16 +83,35 @@ const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDB();
+    
+    // Log system startup
+    await LoggerService.logSystem({
+      level: 'info',
+      message: 'PayStream Backend server started',
+      details: {
+        port: PORT,
+        nodeVersion: process.version,
+        env: process.env.NODE_ENV || 'development',
+      },
+      tags: ['startup'],
+    });
 
     // Start Express server
     app.listen(PORT, () => {
       console.log(`\n🚀 PayStream Backend running on port ${PORT}`);
       console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
       console.log(`👥 Employees API: http://localhost:${PORT}/api/employees`);
-      console.log(`⏳ Streams API: http://localhost:${PORT}/api/streams\n`);
+      console.log(`⏳ Streams API: http://localhost:${PORT}/api/streams`);
+      console.log(`📊 Logs API: http://localhost:${PORT}/api/logs (Admin only)\n`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
+    await LoggerService.logSystem({
+      level: 'error',
+      message: 'Server startup failed',
+      error,
+      tags: ['startup', 'critical'],
+    });
     process.exit(1);
   }
 };
@@ -82,7 +119,12 @@ const startServer = async () => {
 startServer();
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('\n⚠️ Shutting down gracefully...');
+  await LoggerService.logSystem({
+    level: 'info',
+    message: 'Server shutdown initiated',
+    tags: ['shutdown'],
+  });
   process.exit(0);
 });

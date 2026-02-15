@@ -64,26 +64,45 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
 
   const loadConversionHistory = async () => {
     try {
+      console.log('Loading conversion history for:', userAddress);
       const conversionIds = await offRampContract.getUserConversions(userAddress);
+      console.log('Conversion IDs:', conversionIds);
+      
+      if (!conversionIds || conversionIds.length === 0) {
+        console.log('No conversions found');
+        setConversionHistory([]);
+        return;
+      }
+      
       const conversions = await Promise.all(
         conversionIds.map(id => offRampContract.getConversion(id))
       );
-      setConversionHistory(formatConversionHistory(conversions));
+      console.log('Loaded conversions:', conversions);
+      
+      const formattedHistory = formatConversionHistory(conversions);
+      console.log('Formatted history:', formattedHistory);
+      setConversionHistory(formattedHistory);
     } catch (err) {
-      console.error('Error loading history:', err);
+      console.error('Error loading conversion history:', err);
+      console.error('Error details:', err.message, err.stack);
+      setConversionHistory([]);
     }
   };
 
   const loadStats = async () => {
     try {
+      console.log('Loading OffRamp stats...');
       const [volume, fees, count] = await offRampContract.getStats();
-      setStats({
+      const statsData = {
         volume: ethers.formatEther(volume),
         fees: ethers.formatEther(fees),
         count: Number(count)
-      });
+      };
+      console.log('Stats loaded:', statsData);
+      setStats(statsData);
     } catch (err) {
       console.error('Error loading stats:', err);
+      console.error('Error details:', err.message);
     }
   };
 
@@ -247,9 +266,9 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
       </div>
 
       {/* Conversion History */}
-      {conversionHistory.length > 0 && (
-        <div className="conversion-history">
-          <h3>Your Conversion History</h3>
+      <div className="conversion-history">
+        <h3>Your Conversion History</h3>
+        {conversionHistory.length > 0 ? (
           <div className="history-table">
             <table>
               <thead>
@@ -274,8 +293,13 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="no-history">
+            <p>No conversion history yet. Make your first conversion to see it here!</p>
+            <small>Note: Conversion history is fetched from the blockchain. Check the browser console for any errors.</small>
+          </div>
+        )}
+      </div>
 
       <style jsx>{`
         .offramp-panel {
@@ -381,6 +405,7 @@ const OffRampPanel = ({ offRampContract, userAddress }) => {
         }
 
         .est-row {
+          color: #000000;
           display: flex;
           justify-content: space-between;
           padding: 8px 0;

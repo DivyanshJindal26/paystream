@@ -1,6 +1,7 @@
 import express from 'express';
 import { body, param, validationResult } from 'express-validator';
 import Employee from '../models/Employee.js';
+import LoggerService from '../services/loggerService.js';
 
 const router = express.Router();
 
@@ -27,6 +28,15 @@ router.get('/:employerAddress', async (req, res) => {
       employerAddress: employerAddress.toLowerCase() 
     }).sort({ addedAt: -1 });
     
+    await LoggerService.logDatabase({
+      level: 'info',
+      operation: 'find',
+      collection: 'employees',
+      message: `Retrieved ${employees.length} employees`,
+      userAddress: employerAddress,
+      details: { count: employees.length },
+    });
+    
     res.json({
       success: true,
       count: employees.length,
@@ -34,6 +44,13 @@ router.get('/:employerAddress', async (req, res) => {
     });
   } catch (error) {
     console.error('Get employees error:', error);
+    await LoggerService.logDatabase({
+      level: 'error',
+      operation: 'find',
+      collection: 'employees',
+      message: 'Failed to retrieve employees',
+      error,
+    });
     res.status(500).json({ 
       success: false, 
       error: error.message 
@@ -79,12 +96,32 @@ router.post(
 
       await employee.save();
 
+      await LoggerService.logBusiness({
+        level: 'success',
+        message: 'Employee added successfully',
+        userAddress: employerAddress,
+        employeeAddress: walletAddress,
+        details: {
+          employeeId: employee._id,
+          name,
+          department,
+        },
+        tags: ['employee', 'create'],
+      });
+
       res.status(201).json({
         success: true,
         employee,
       });
     } catch (error) {
       console.error('Add employee error:', error);
+      await LoggerService.logBusiness({
+        level: 'error',
+        message: 'Failed to add employee',
+        userAddress: employerAddress,
+        error,
+        tags: ['employee', 'create', 'failed'],
+      });
       res.status(500).json({ 
         success: false, 
         error: error.message 
@@ -154,6 +191,18 @@ router.post(
       res.json({
         success: true,
         results,
+      });
+      
+      await LoggerService.logBusiness({
+        level: 'info',
+        message: 'Bulk employee import completed',
+        userAddress: employerAddress,
+        details: {
+          added: results.added.length,
+          skipped: results.skipped.length,
+          errors: results.errors.length,
+        },
+        tags: ['employee', 'bulk', 'import'],
       });
     } catch (error) {
       console.error('Bulk add error:', error);

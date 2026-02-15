@@ -1,6 +1,7 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import Stream from '../models/Stream.js';
+import LoggerService from '../services/loggerService.js';
 
 const router = express.Router();
 
@@ -140,12 +141,33 @@ router.post(
 
       await stream.save();
 
+      await LoggerService.logBusiness({
+        level: 'success',
+        message: 'Salary stream created',
+        employerAddress,
+        employeeAddress,
+        details: {
+          streamId: stream._id,
+          monthlySalary,
+          durationMonths,
+          taxPercent,
+          creationTxHash,
+        },
+        tags: ['stream', 'create', 'payroll'],
+      });
+
       res.status(201).json({
         success: true,
         stream,
       });
     } catch (error) {
       console.error('Create stream error:', error);
+      await LoggerService.logBusiness({
+        level: 'error',
+        message: 'Failed to create salary stream',
+        error,
+        tags: ['stream', 'create', 'failed'],
+      });
       res.status(500).json({ 
         success: false, 
         error: error.message 
@@ -190,6 +212,15 @@ router.patch(
       res.json({
         success: true,
         stream,
+      });
+      
+      await LoggerService.logBusiness({
+        level: 'info',
+        message: `Stream ${paused ? 'paused' : 'resumed'}`,
+        employerAddress,
+        employeeAddress,
+        details: { streamId: stream._id, paused },
+        tags: ['stream', paused ? 'pause' : 'resume'],
       });
     } catch (error) {
       console.error('Update stream status error:', error);
@@ -237,6 +268,18 @@ router.patch(
       res.json({
         success: true,
         stream,
+      });
+      
+      await LoggerService.logBusiness({
+        level: 'warn',
+        message: 'Stream cancelled',
+        employerAddress,
+        employeeAddress,
+        details: {
+          streamId: stream._id,
+          cancellationTxHash,
+        },
+        tags: ['stream', 'cancel'],
       });
     } catch (error) {
       console.error('Cancel stream error:', error);

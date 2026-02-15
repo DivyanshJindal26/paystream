@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import Landing from './pages/Landing';
 import AdminDashboard from './pages/AdminDashboard';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import LogsPage from './pages/LogsPage';
 import './styles.css';
 
 function NetworkGuard({ children }) {
@@ -42,6 +43,7 @@ function AppInner() {
         <Route path="/" element={<Landing />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/employee" element={<EmployeeDashboard />} />
+        <Route path="/logs" element={<LogsPage />} />
       </Routes>
     </NetworkGuard>
   );

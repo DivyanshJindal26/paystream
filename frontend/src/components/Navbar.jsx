@@ -1,7 +1,12 @@
 import { NavLink, Link } from 'react-router-dom';
+import { useWallet } from '../context/WalletContext';
 import ConnectWallet from './ConnectWallet';
 
 export default function Navbar() {
+  const { account } = useWallet();
+  const adminAddress = import.meta.env.VITE_ADMIN_ADDRESS?.toLowerCase();
+  const isAdmin = account && adminAddress && account.toLowerCase() === adminAddress;
+  
   return (
     <nav className="navbar">
       <Link to="/" className="navbar-brand">
@@ -19,6 +24,11 @@ export default function Navbar() {
         <NavLink to="/employee" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
           Employee Portal
         </NavLink>
+        {isAdmin && (
+          <NavLink to="/logs" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
+            📊 Logs
+          </NavLink>
+        )}
       </div>
 
       <div className="navbar-right">

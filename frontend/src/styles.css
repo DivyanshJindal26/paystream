@@ -1221,3 +1221,42 @@ body {
   0%, 100% { border-color: rgba(0, 255, 136, 0.12); }
   50% { border-color: rgba(0, 255, 136, 0.3); box-shadow: 0 0 15px rgba(0, 255, 136, 0.1); }
 }
+
+/* ========== PAGE CONTAINER ========== */
+.page-container {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+  padding-top: 80px;
+  padding-bottom: 40px;
+}
+
+.error-message {
+  max-width: 600px;
+  margin: 100px auto;
+  padding: 3rem;
+  background: rgba(255, 77, 106, 0.05);
+  border: 1px solid rgba(255, 77, 106, 0.2);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.error-message h2 {
+  color: var(--text-primary);
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.error-message p {
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-bottom: 0.5rem;
+}
+
+.error-message .admin-hint {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--cyan);
+  word-break: break-all;
+}
