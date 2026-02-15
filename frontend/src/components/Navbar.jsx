@@ -28,9 +28,6 @@ export default function Navbar() {
         <NavLink to="/employee" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
           Employee
         </NavLink>
-        <NavLink to="/admin" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
-          Admin
-        </NavLink>
         {isAdmin && (
           <NavLink to="/logs" className={({ isActive }) => `navbar-link ${isActive ? 'active' : ''}`}>
             Logs

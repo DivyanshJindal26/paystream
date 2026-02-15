@@ -50,7 +50,7 @@ function AppInner() {
         <Route path="/company" element={<CompanyPanel />} />
         <Route path="/hr" element={<HRDashboard />} />
         <Route path="/employee" element={<EmployeePortal />} />
-        <Route path="/admin" element={<AdminDashboard />} />
+        {/* <Route path="/admin" element={<AdminDashboard />} /> */}
         <Route path="/employee-legacy" element={<EmployeeDashboard />} />
         <Route path="/logs" element={<LogsPage />} />
       </Routes>
