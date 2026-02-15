@@ -1014,71 +1014,161 @@ function EditStreamModal({ address, streamData, onClose, onSuccess }) {
 }
 
 // ========== YIELD ENGINE PANEL ==========
+/**
+ * ⏱️ LOCAL YIELD SIMULATION ENGINE
+ * 
+ * Architecture:
+ * - Fetches yield stats ONCE on mount (no polling)
+ * - Simulates yield locally using contract formula:
+ *   yield = (reserved × annualRate × elapsed) / (100 × SECONDS_PER_YEAR)
+ * - Updates every 1 second for smooth animation
+ * - Drift correction on tab focus
+ * - Refresh after claim
+ * 
+ * Security: Frontend simulation is DISPLAY ONLY
+ * Actual claimYield() always uses contract-calculated values
+ */
 function YieldEnginePanel() {
   const { account, contracts } = useWallet();
-  const [yieldStats, setYieldStats] = useState(null);
   const [displayYield, setDisplayYield] = useState('0');
   const [claiming, setClaiming] = useState(false);
   const [claimSuccess, setClaimSuccess] = useState(false);
-  const animRef = useRef(null);
-  const lastFetchRef = useRef({ accrued: 0n, reserved: 0n, rate: 5, timestamp: 0 });
+  
+  // Yield parameters (fetched once)
+  const [yieldData, setYieldData] = useState({
+    reserved: '0',
+    totalClaimed: '0',
+    annualRate: 5,
+    lastClaimTimestamp: 0,
+  });
+  
+  const [initialized, setInitialized] = useState(false);
+  const SECONDS_PER_YEAR = 365 * 24 * 3600;
 
+  /**
+   * Fetch yield stats from contract (called once on mount + drift correction)
+   */
   const fetchYieldStats = useCallback(async () => {
     if (!contracts.treasury || !account) return;
     try {
+      console.log('🔄 Fetching yield stats from contract (no polling)...');
+      
       const stats = await contracts.treasury.getYieldStats(account);
-      const s = {
+      
+      // Store yield parameters for local simulation
+      setYieldData({
         reserved: stats[0].toString(),
-        accruedYield: stats[1].toString(),
         totalClaimed: stats[2].toString(),
         annualRate: Number(stats[3]),
-        lastClaim: Number(stats[4]),
-      };
-      setYieldStats(s);
-      lastFetchRef.current = {
-        accrued: stats[1],
-        reserved: stats[0],
-        rate: Number(stats[3]),
-        timestamp: Date.now(),
-      };
+        lastClaimTimestamp: Number(stats[4]),
+      });
+      
+      setInitialized(true);
+      
+      console.log('✅ Yield data loaded:', {
+        reserved: ethers.formatEther(stats[0]),
+        annualRate: Number(stats[3]) + '%',
+        lastClaim: stats[4] > 0 ? new Date(Number(stats[4]) * 1000).toLocaleString() : 'Never',
+        totalClaimed: ethers.formatEther(stats[2]),
+      });
     } catch (err) {
-      console.error('Yield stats error:', err);
+      console.error('❌ Yield stats fetch error:', err);
     }
   }, [contracts.treasury, account]);
 
+  /**
+   * Fetch yield stats ONCE on mount
+   * NO polling intervals - pure local simulation
+   */
   useEffect(() => {
     fetchYieldStats();
-    const iv = setInterval(fetchYieldStats, 10000);
-    return () => clearInterval(iv);
   }, [fetchYieldStats]);
 
-  // Live ticking yield counter (updates every second)
+  /**
+   * DRIFT CORRECTION: Re-fetch on tab focus
+   */
   useEffect(() => {
-    const tick = () => {
-      const { accrued, reserved, rate, timestamp } = lastFetchRef.current;
-      if (reserved === 0n) {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && initialized) {
+        console.log('👀 Tab focused - refreshing yield data for drift correction');
+        fetchYieldStats();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [initialized, fetchYieldStats]);
+
+  /**
+   * LOCAL YIELD SIMULATION
+   * Updates every 1 second (smooth animation)
+   * 
+   * Formula (mirrors Treasury contract):
+   * elapsed = currentTime - lastClaimTimestamp
+   * yield = (reserved × annualRate × elapsed) / (100 × SECONDS_PER_YEAR)
+   */
+  useEffect(() => {
+    if (!initialized) return;
+
+    const simulateYield = () => {
+      const reservedBigInt = BigInt(yieldData.reserved || '0');
+      const lastClaimTimestamp = yieldData.lastClaimTimestamp;
+
+      // If no reserved capital or no last claim, yield is zero
+      if (reservedBigInt === 0n || lastClaimTimestamp === 0) {
         setDisplayYield('0.000000000000');
         return;
       }
-      const elapsedMs = Date.now() - timestamp;
-      const elapsedSec = elapsedMs / 1000;
-      // yield increment = reserved * rate * elapsed / (100 * 365 days)
-      const increment = (Number(ethers.formatEther(reserved)) * rate * elapsedSec) / (100 * 365 * 24 * 3600);
-      const total = Number(ethers.formatEther(accrued)) + increment;
-      setDisplayYield(total.toFixed(12));
-    };
-    animRef.current = setInterval(tick, 100);
-    return () => clearInterval(animRef.current);
-  }, [yieldStats]);
 
+      // Get current time (Unix timestamp in seconds)
+      const currentTime = Math.floor(Date.now() / 1000);
+
+      // Calculate elapsed time since last claim
+      const elapsedSeconds = currentTime - lastClaimTimestamp;
+
+      if (elapsedSeconds <= 0) {
+        setDisplayYield('0.000000000000');
+        return;
+      }
+
+      // Calculate yield using contract formula:
+      // yield = (reserved × annualRate × elapsed) / (100 × SECONDS_PER_YEAR)
+      const annualRate = BigInt(yieldData.annualRate);
+      const elapsed = BigInt(elapsedSeconds);
+      const divisor = BigInt(100 * SECONDS_PER_YEAR);
+
+      const yieldAmount = (reservedBigInt * annualRate * elapsed) / divisor;
+
+      // Format for display (12 decimal places for precision)
+      const yieldFormatted = ethers.formatEther(yieldAmount);
+      const yieldValue = parseFloat(yieldFormatted);
+
+      setDisplayYield(yieldValue.toFixed(12));
+    };
+
+    // Run simulation immediately
+    simulateYield();
+
+    // Update every 1 second for smooth animation
+    const interval = setInterval(simulateYield, 1000);
+    
+    return () => clearInterval(interval);
+  }, [initialized, yieldData, SECONDS_PER_YEAR]);
+
+  /**
+   * Claim yield and refresh data
+   */
   const handleClaimYield = async () => {
     if (!contracts.treasury) return;
     setClaiming(true);
     try {
       const tx = await contracts.treasury.claimYield();
       await tx.wait();
+      
       setClaimSuccess(true);
       setTimeout(() => setClaimSuccess(false), 2000);
+      
+      // Refresh yield data after claim
       fetchYieldStats();
     } catch (err) {
       console.error('Claim yield error:', err);
@@ -1092,7 +1182,7 @@ function YieldEnginePanel() {
     <div className="glass-card yield-panel">
       <div className="card-header">
         <span className="card-title">🏦 Payroll Capital Yield Engine</span>
-        <span className="yield-badge">⚡ {yieldStats?.annualRate || 5}% APY</span>
+        <span className="yield-badge">⚡ {yieldData.annualRate}% APY</span>
       </div>
 
       <div className="yield-display">
@@ -1112,14 +1202,14 @@ function YieldEnginePanel() {
         <div className="stat-item" style={{ borderColor: 'rgba(255,215,0,0.15)' }}>
           <div className="stat-label">Reserved Capital</div>
           <div className="stat-value" style={{ color: '#ffd700', fontSize: '1.1rem' }}>
-            {yieldStats ? parseFloat(ethers.formatEther(yieldStats.reserved)).toFixed(4) : '0.0000'}
+            {initialized ? parseFloat(ethers.formatEther(yieldData.reserved)).toFixed(4) : '0.0000'}
           </div>
           <div className="form-hint">HLUSD</div>
         </div>
         <div className="stat-item" style={{ borderColor: 'rgba(0,255,136,0.15)' }}>
           <div className="stat-label">Total Yield Claimed</div>
           <div className="stat-value green" style={{ fontSize: '1.1rem' }}>
-            {yieldStats ? parseFloat(ethers.formatEther(yieldStats.totalClaimed)).toFixed(6) : '0.000000'}
+            {initialized ? parseFloat(ethers.formatEther(yieldData.totalClaimed)).toFixed(6) : '0.000000'}
           </div>
           <div className="form-hint">HLUSD</div>
         </div>
@@ -1132,6 +1222,13 @@ function YieldEnginePanel() {
       >
         {claiming ? <span className="spinner" /> : claimSuccess ? '✅ Yield Claimed!' : '💰 Claim Yield'}
       </button>
+
+      {/* Last Claim Info */}
+      {yieldData.lastClaimTimestamp > 0 && (
+        <div className="form-hint" style={{ marginTop: '0.75rem', textAlign: 'center', color: 'var(--text-dim)' }}>
+          Last claim: {new Date(yieldData.lastClaimTimestamp * 1000).toLocaleString()}
+        </div>
+      )}
     </div>
   );
 }

@@ -131,7 +131,14 @@ export default function EmployeeDashboard() {
       );
       setSuccessPulse(true);
       setTimeout(() => setSuccessPulse(false), 1000);
+      
+      // Refresh stream data
       fetchStream();
+      
+      // Trigger EarningsTicker refresh for drift correction
+      if (typeof window.refreshEarningsTicker === 'function') {
+        window.refreshEarningsTicker();
+      }
     } catch (err) {
       console.error('Withdraw error:', err);
       let errorMsg = err.reason || err.message || 'Withdrawal failed';
